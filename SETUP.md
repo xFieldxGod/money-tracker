@@ -46,6 +46,20 @@ NEXT_PUBLIC_FIREBASE_PROJECT_ID=your-project-id
 NEXT_PUBLIC_FIREBASE_APP_ID=1:xxx:web:xxx
 ```
 
+## 6.1 ใส่ Gemini API Key (สำหรับ AI Quick-Add)
+
+ฟีเจอร์ "พิมพ์เร็ว" (เช่น `ตีแบด 205 บาท` แล้ว AI เลือกหมวดหมู่ให้) ใช้ Google Gemini
+
+1. ไปที่ https://aistudio.google.com/apikey → **Create API key** (ฟรี)
+2. เพิ่มลงใน `.env.local`:
+
+```
+GEMINI_API_KEY=AIza...
+```
+
+> ⚠️ ห้ามตั้งชื่อขึ้นต้นด้วย `NEXT_PUBLIC_` เพราะ key นี้ต้องอยู่ฝั่งเซิร์ฟเวอร์เท่านั้น
+> ถ้าไม่ใส่ key ฟีเจอร์จะ fallback เป็นการดึงจำนวนเงินอัตโนมัติ แล้วให้เลือกหมวดหมู่เอง
+
 ## 7. รัน Dev Server
 
 ```bash
@@ -61,4 +75,4 @@ npx vercel
 ```
 
 อย่าลืมใส่ Environment Variables ใน Vercel dashboard ด้วย
-(Project Settings → Environment Variables)
+(Project Settings → Environment Variables) — รวมถึง `GEMINI_API_KEY` ด้วย แล้ว redeploy

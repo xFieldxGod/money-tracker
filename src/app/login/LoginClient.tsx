@@ -4,6 +4,7 @@ import { signInWithPopup } from 'firebase/auth'
 import { auth, googleProvider } from '@/lib/firebase'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
+import Image from 'next/image'
 import { isInAppBrowser } from '@/lib/browserDetect'
 
 export default function LoginClient() {
@@ -38,8 +39,8 @@ export default function LoginClient() {
       <div className="relative w-full max-w-sm bg-white/70 backdrop-blur-xl border border-white/60 shadow-premium-lg rounded-3xl p-8 sm:p-10 space-y-8 transition-premium">
         {/* App Branding */}
         <div className="text-center space-y-3">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-500/10 to-purple-600/10 border border-indigo-500/20 text-4xl shadow-sm mb-2">
-            💰
+          <div className="inline-flex w-16 h-16 rounded-2xl overflow-hidden shadow-premium ring-1 ring-black/5 mb-2">
+            <Image src="/logo.png" alt="Money Tracker logo" width={64} height={64} className="w-full h-full object-cover" priority />
           </div>
           <div>
             <h1 className="text-3xl font-extrabold tracking-tight bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">

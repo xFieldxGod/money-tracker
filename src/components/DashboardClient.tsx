@@ -12,10 +12,13 @@ import Link from 'next/link'
 import { useAuth } from '@/contexts/AuthContext'
 import { format } from 'date-fns'
 import { th } from 'date-fns/locale'
-import type { Transaction } from '@/types'
+import { EXPENSE_CATEGORIES, INCOME_CATEGORIES } from '@/types'
+import type { Transaction, CustomCategory } from '@/types'
+import type { ParsedExpense } from '@/lib/parseExpense'
 import dynamic from 'next/dynamic'
 import SummaryCards from './SummaryCards'
 import TransactionForm from './TransactionForm'
+import QuickAddBar from './QuickAddBar'
 
 const MonthlyChart = dynamic(() => import('./MonthlyChart'), {
   ssr: false,
@@ -42,6 +45,8 @@ export default function DashboardClient({ userId }: Props) {
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
+  const [prefillData, setPrefillData] = useState<Partial<Pick<Transaction, 'type' | 'amount' | 'category' | 'note' | 'date'>> | null>(null)
+  const [pendingNewCategory, setPendingNewCategory] = useState<CustomCategory | null>(null)
   const [editingTx, setEditingTx] = useState<Transaction | null>(null)
   const [showExportConfirm, setShowExportConfirm] = useState(false)
   const { customCategories, addCustomCategory, removeCustomCategory } = useCustomCategories(userId)
@@ -64,6 +69,45 @@ export default function DashboardClient({ userId }: Props) {
     () => transactions.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0),
     [transactions]
   )
+
+  // รายชื่อหมวด (preset + custom) ส่งให้ AI เลือก
+  const expenseCategoryNames = useMemo(
+    () => [
+      ...EXPENSE_CATEGORIES.map(c => c.name),
+      ...customCategories.filter(c => c.type === 'expense').map(c => `${c.icon} ${c.name}`),
+    ],
+    [customCategories]
+  )
+  const incomeCategoryNames = useMemo(
+    () => [
+      ...INCOME_CATEGORIES.map(c => c.name),
+      ...customCategories.filter(c => c.type === 'income').map(c => `${c.icon} ${c.name}`),
+    ],
+    [customCategories]
+  )
+
+  function handleParsed(p: ParsedExpense) {
+    if (p.isNew && p.category) {
+      setPrefillData({ type: p.type, amount: p.amount, category: `${p.icon} ${p.category}`, note: p.note, date: p.date })
+      setPendingNewCategory({ name: p.category, type: p.type, icon: p.icon })
+    } else {
+      setPrefillData({ type: p.type, amount: p.amount, category: p.category, note: p.note, date: p.date })
+      setPendingNewCategory(null)
+    }
+    setShowForm(true)
+  }
+
+  function openBlankForm() {
+    setPrefillData(null)
+    setPendingNewCategory(null)
+    setShowForm(true)
+  }
+
+  function closeForm() {
+    setShowForm(false)
+    setPrefillData(null)
+    setPendingNewCategory(null)
+  }
 
   const loadTransactions = useCallback(async (date: Date) => {
     const firstDay = new Date(date.getFullYear(), date.getMonth(), 1)
@@ -108,7 +152,15 @@ export default function DashboardClient({ userId }: Props) {
     if (txDate.getMonth() === selectedMonth.getMonth() && txDate.getFullYear() === selectedMonth.getFullYear()) {
       setTransactions(prev => [newTx, ...prev].sort((a, b) => b.date !== a.date ? b.date.localeCompare(a.date) : b.created_at.localeCompare(a.created_at)))
     }
-    setShowForm(false)
+    // เก็บหมวดใหม่ที่ AI เสนอไว้ใช้ครั้งหน้า ถ้าผู้ใช้ยังเลือกไว้ และยังไม่มีในลิสต์
+    if (
+      pendingNewCategory &&
+      tx.category === `${pendingNewCategory.icon} ${pendingNewCategory.name}` &&
+      !customCategories.some(c => c.name === pendingNewCategory.name && c.type === pendingNewCategory.type)
+    ) {
+      await addCustomCategory(pendingNewCategory)
+    }
+    closeForm()
   }
 
   async function handleEdit(tx: Omit<Transaction, 'id' | 'user_id' | 'created_at'>) {
@@ -238,6 +290,13 @@ export default function DashboardClient({ userId }: Props) {
       {/* Glassmorphic Summary Balance Card */}
       <SummaryCards income={totalIncome} expense={totalExpense} transactions={transactions} userId={userId} />
 
+      {/* AI Quick-Add Bar */}
+      <QuickAddBar
+        expenseCategories={expenseCategoryNames}
+        incomeCategories={incomeCategoryNames}
+        onParsed={handleParsed}
+      />
+
       {/* Month Selector & Quick Actions */}
       <div className="flex items-center justify-between gap-3 bg-white border border-slate-200/45 p-3 rounded-[24px] shadow-premium">
         <div className="flex items-center gap-2">
@@ -296,7 +355,7 @@ export default function DashboardClient({ userId }: Props) {
 
         {/* Center Floating Add Button */}
         <button
-          onClick={() => setShowForm(true)}
+          onClick={openBlankForm}
           className="w-12 h-12 rounded-full bg-emerald-500 hover:bg-emerald-600 text-white flex items-center justify-center text-xl shadow-md shadow-emerald-100/50 hover:shadow-lg hover:shadow-emerald-200/50 active:scale-95 transition-all cursor-pointer transform -translate-y-4 animate-bounce-subtle"
           title="บันทึกรายการใหม่"
         >
@@ -327,7 +386,8 @@ export default function DashboardClient({ userId }: Props) {
       {showForm && (
         <TransactionForm
           onSubmit={handleAdd}
-          onClose={() => setShowForm(false)}
+          onClose={closeForm}
+          prefill={prefillData ?? undefined}
           customCategories={customCategories}
           onAddCustomCategory={addCustomCategory}
           onRemoveCustomCategory={removeCustomCategory}

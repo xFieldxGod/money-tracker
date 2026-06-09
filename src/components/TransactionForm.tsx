@@ -10,6 +10,8 @@ interface Props {
   onSubmit: (tx: Omit<Transaction, 'id' | 'user_id' | 'created_at'>) => Promise<void>
   onClose: () => void
   initialData?: Transaction
+  /** ค่าตั้งต้นจาก AI Quick-Add (ใช้ตอนเพิ่มรายการ ไม่ทำให้เข้าโหมดแก้ไข) */
+  prefill?: Partial<Pick<Transaction, 'type' | 'amount' | 'category' | 'note' | 'date'>>
   customCategories?: CustomCategory[]
   onAddCustomCategory?: (cat: CustomCategory) => Promise<void>
   onRemoveCustomCategory?: (name: string) => Promise<void>
@@ -17,12 +19,14 @@ interface Props {
 
 const COMMON_EMOJIS = ['🍜','☕','🛵','🚗','⛽','🏠','💊','🎬','🛍️','📱','💡','📚','🎮','✈️','🍺','🎁','💻','📈','💼','🛒','💳','🐾','🏋️','🎵','🍕','🧋','📦','🏖️']
 
-export default function TransactionForm({ onSubmit, onClose, initialData, customCategories = [], onAddCustomCategory, onRemoveCustomCategory }: Props) {
-  const [type, setType] = useState<TransactionType>(initialData?.type ?? 'expense')
-  const [amount, setAmount] = useState(initialData?.amount?.toString() ?? '')
-  const [category, setCategory] = useState(initialData?.category ?? '')
-  const [note, setNote] = useState(initialData?.note ?? '')
-  const [date, setDate] = useState(initialData?.date ?? new Date().toISOString().split('T')[0])
+export default function TransactionForm({ onSubmit, onClose, initialData, prefill, customCategories = [], onAddCustomCategory, onRemoveCustomCategory }: Props) {
+  const [type, setType] = useState<TransactionType>(initialData?.type ?? prefill?.type ?? 'expense')
+  const [amount, setAmount] = useState(
+    (initialData?.amount ?? prefill?.amount)?.toString() ?? ''
+  )
+  const [category, setCategory] = useState(initialData?.category ?? prefill?.category ?? '')
+  const [note, setNote] = useState(initialData?.note ?? prefill?.note ?? '')
+  const [date, setDate] = useState(initialData?.date ?? prefill?.date ?? new Date().toISOString().split('T')[0])
   const [loading, setLoading] = useState(false)
   const [isCustom, setIsCustom] = useState(false)
   const [customName, setCustomName] = useState('')
