@@ -3,18 +3,22 @@ import { Plus_Jakarta_Sans, IBM_Plex_Sans_Thai } from 'next/font/google';
 import "./globals.css";
 import { AuthProvider } from '@/contexts/AuthContext'
 
+// Plus Jakarta เป็น variable font — ไม่ต้องระบุ weight ทำให้โหลดไฟล์เดียว
+// ที่ครอบคลุมทุกน้ำหนัก (ใช้งานทันที) แทนที่จะ preload แยกทุกน้ำหนัก
 const plusJakarta = Plus_Jakarta_Sans({
   subsets: ['latin'],
-  weight: ['300', '400', '500', '600', '700', '800'],
-  variable: '--font-sans',
+  variable: '--font-jakarta',
   display: 'swap',
 });
 
+// IBM Plex Sans Thai ไม่มีเวอร์ชัน variable — ระบุเฉพาะน้ำหนักที่แอปใช้จริง (400–700)
+// และปิด preload เพราะเป็นฟอนต์ fallback สำหรับอักษรไทย (โหลดผ่าน @font-face + display: swap)
 const ibmPlexThai = IBM_Plex_Sans_Thai({
   subsets: ['thai'],
-  weight: ['300', '400', '500', '600', '700'],
+  weight: ['400', '500', '600', '700'],
   variable: '--font-thai',
   display: 'swap',
+  preload: false,
 });
 
 export const metadata: Metadata = {

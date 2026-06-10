@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useId } from 'react'
 import { collection, query, where, getDocs, orderBy } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import type { Transaction } from '@/types'
@@ -18,20 +18,63 @@ function fmt(n: number) {
   return n.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
-function StockChart({ transactions }: { transactions: Transaction[] }) {
+type Granularity = 'day' | 'week' | 'month'
+
+// เลือกความถี่ของการรวมข้อมูลตามช่วงเวลาที่เลือก เพื่อให้จำนวนจุดบนกราฟคงที่
+function granularityFor(range: Range): Granularity {
+  if (range === '1W' || range === '1M') return 'day'
+  if (range === '3M') return 'week'
+  return 'month' // ALL
+}
+
+// แปลงวันที่ (YYYY-MM-DD) เป็น key ของ bucket ตาม granularity
+function bucketKey(dateStr: string, g: Granularity): string {
+  if (g === 'month') return dateStr.slice(0, 7) // YYYY-MM
+  if (g === 'day') return dateStr // YYYY-MM-DD
+  // week: เลื่อนไปวันจันทร์ของสัปดาห์นั้นเป็น key
+  const d = new Date(dateStr + 'T00:00:00')
+  const offset = (d.getDay() + 6) % 7 // 0 = จันทร์
+  d.setDate(d.getDate() - offset)
+  return d.toISOString().slice(0, 10)
+}
+
+// สร้าง SVG path แบบเส้นโค้งนุ่ม (Catmull-Rom → cubic Bézier)
+function smoothPath(coords: { x: number; y: number }[]): string {
+  if (coords.length < 2) return ''
+  const t = 0.18 // ค่าความนุ่มของเส้น
+  let d = `M ${coords[0].x} ${coords[0].y}`
+  for (let i = 0; i < coords.length - 1; i++) {
+    const p0 = coords[i - 1] || coords[i]
+    const p1 = coords[i]
+    const p2 = coords[i + 1]
+    const p3 = coords[i + 2] || p2
+    const c1x = p1.x + (p2.x - p0.x) * t
+    const c1y = p1.y + (p2.y - p0.y) * t
+    const c2x = p2.x - (p3.x - p1.x) * t
+    const c2y = p2.y - (p3.y - p1.y) * t
+    d += ` C ${c1x} ${c1y}, ${c2x} ${c2y}, ${p2.x} ${p2.y}`
+  }
+  return d
+}
+
+function StockChart({ transactions, range }: { transactions: Transaction[]; range: Range }) {
+  const gradId = useId()
   const points = useMemo(() => {
     const sorted = [...transactions].sort((a, b) => {
       if (a.date !== b.date) return a.date.localeCompare(b.date)
       return a.created_at.localeCompare(b.created_at)
     })
-let balance = 0
-    const pts: { balance: number }[] = [{ balance: 0 }]
+    const g = granularityFor(range)
+    // รวมเป็น bucket: เก็บยอดคงเหลือสะสม ณ ธุรกรรมสุดท้ายของแต่ละ bucket (closing balance)
+    let balance = 0
+    const buckets = new Map<string, number>()
     for (const tx of sorted) {
       balance += tx.type === 'income' ? tx.amount : -tx.amount
-      pts.push({ balance })
+      buckets.set(bucketKey(tx.date, g), balance)
     }
-    return pts
-  }, [transactions])
+    const ordered = [...buckets.entries()].sort((a, b) => a[0].localeCompare(b[0]))
+    return [{ balance: 0 }, ...ordered.map(([, bal]) => ({ balance: bal }))]
+  }, [transactions, range])
 
   if (points.length < 2) {
     return (
@@ -46,43 +89,47 @@ let balance = 0
   const values = points.map(p => p.balance)
   const minVal = Math.min(...values)
   const maxVal = Math.max(...values)
-  const range = maxVal - minVal || 1
+  const span = maxVal - minVal || 1
   const W = 300
   const H = 60
   const PAD = 4
 
   const coords = points.map((p, i) => ({
     x: (i / (points.length - 1)) * (W - PAD * 2) + PAD,
-    y: H - PAD - ((p.balance - minVal) / range) * (H - PAD * 2),
-    balance: p.balance,
+    y: H - PAD - ((p.balance - minVal) / span) * (H - PAD * 2),
   }))
 
-  const segments = coords.slice(0, -1).map((c, i) => ({
-    x1: c.x, y1: c.y,
-    x2: coords[i + 1].x, y2: coords[i + 1].y,
-    color: coords[i + 1].balance >= c.balance ? '#10b981' : '#f43f5e',
-  }))
+  // สีตามเทรนด์รวม: ยอดปลายทาง vs ยอดเริ่มต้น
+  const color = points[points.length - 1].balance >= points[0].balance ? '#10b981' : '#f43f5e'
 
-  const lastColor = segments[segments.length - 1].color
+  const linePath = smoothPath(coords)
+  const last = coords[coords.length - 1]
+  // พื้นที่ไล่เฉด: ลากเส้นโค้งเดิมลงไปชนขอบล่างแล้วปิด
+  const areaPath = `${linePath} L ${last.x} ${H} L ${coords[0].x} ${H} Z`
 
   return (
     <div className="w-full select-none">
       <svg className="w-full" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ height: 64 }}>
-        {segments.map((seg, i) => (
-          <line
-            key={i}
-            x1={seg.x1} y1={seg.y1}
-            x2={seg.x2} y2={seg.y2}
-            stroke={seg.color}
-            strokeWidth="2.5"
-            strokeLinecap="round"
-          />
-        ))}
+        <defs>
+          <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={color} stopOpacity="0.28" />
+            <stop offset="100%" stopColor={color} stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <path d={areaPath} fill={`url(#${gradId})`} stroke="none" />
+        <path
+          d={linePath}
+          fill="none"
+          stroke={color}
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
         <circle
-          cx={coords[coords.length - 1].x}
-          cy={coords[coords.length - 1].y}
+          cx={last.x}
+          cy={last.y}
           r="4"
-          fill={lastColor}
+          fill={color}
           stroke="white"
           strokeWidth="2"
         />
@@ -186,7 +233,7 @@ export default function SummaryCards({ income, expense, transactions, userId }: 
               <div className="w-full h-0.5 bg-slate-200 rounded-full animate-pulse" />
             </div>
           ) : (
-            <StockChart transactions={chartTx} />
+            <StockChart transactions={chartTx} range={range} />
           )}
         </div>
 

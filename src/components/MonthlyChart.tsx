@@ -51,16 +51,32 @@ const COLOR_GRADIENTS = [
   ['#fb923c', '#f97316'],
 ]
 
+// เปอร์เซ็นต์ที่แสดงขั้นต่ำ 1% — หมวดเล็ก ๆ จะได้ไม่ขึ้นเป็น 0%
+const formatPercent = (pct: number) => `${Math.max(1, Math.round(pct))}%`
+
 export default function MonthlyChart({ transactions }: Props) {
   const expenseByCategory = useMemo(() => {
-    const bycat: Record<string, number> = {}
-    for (const t of transactions.filter(t => t.type === 'expense')) {
-      bycat[t.category] = (bycat[t.category] ?? 0) + t.amount
+    // รวมหมวดที่ชื่อเดียวกันแต่บันทึกมาคนละแบบ (มี/ไม่มีอีโมจินำหน้า) เป็นหมวดเดียว
+    const bycat = new Map<string, { name: string; value: number; icon: string }>()
+    for (const t of transactions) {
+      if (t.type !== 'expense') continue
+      const name = getCategoryName(t.category)
+      const icon = getCategoryIcon(t.category)
+      const entry = bycat.get(name)
+      if (entry) {
+        entry.value += t.amount
+        if (entry.icon === '💳' && icon !== '💳') entry.icon = icon
+      } else {
+        bycat.set(name, { name, value: t.amount, icon })
+      }
     }
-    return Object.entries(bycat)
-      .map(([name, value]) => ({ name, value }))
-      .sort((a, b) => b.value - a.value)
+    return [...bycat.values()].sort((a, b) => b.value - a.value)
   }, [transactions])
+
+  const totalExpense = useMemo(
+    () => expenseByCategory.reduce((s, x) => s + x.value, 0),
+    [expenseByCategory]
+  )
 
   if (transactions.length === 0) {
     return (
@@ -71,11 +87,6 @@ export default function MonthlyChart({ transactions }: Props) {
     )
   }
 
-  const totalExpense = useMemo(
-    () => expenseByCategory.reduce((s, x) => s + x.value, 0),
-    [expenseByCategory]
-  )
-
   const donutOption = expenseByCategory.length > 0 ? {
     tooltip: {
       trigger: 'item',
@@ -84,9 +95,9 @@ export default function MonthlyChart({ transactions }: Props) {
       borderWidth: 1,
       textStyle: { color: '#e2e8f0', fontSize: 11, fontFamily: 'var(--font-sans)' },
       formatter: (p: PieTooltipParam) =>
-        `<div style="font-weight:700;margin-bottom:3px;color:#a5b4fc">${getCategoryIcon(p.name)} ${getCategoryName(p.name)}</div>` +
+        `<div style="font-weight:700;margin-bottom:3px;color:#a5b4fc">${expenseByCategory.find(c => c.name === p.name)?.icon ?? '💳'} ${p.name}</div>` +
         `<div style="color:#f1f5f9;font-weight:800;font-size:13px">฿${Number(p.value).toLocaleString('th-TH')}</div>` +
-        `<div style="color:#94a3b8;font-size:10px">${p.percent.toFixed(1)}% ของรายจ่ายทั้งหมด</div>`,
+        `<div style="color:#94a3b8;font-size:10px">${formatPercent(p.percent)} ของรายจ่ายทั้งหมด</div>`,
     },
     legend: { show: false },
     graphic: [{
@@ -94,19 +105,6 @@ export default function MonthlyChart({ transactions }: Props) {
       left: 'center',
       top: 'center',
       children: [
-        {
-          type: 'text',
-          style: {
-            text: `฿${totalExpense.toLocaleString('th-TH')}`,
-            textAlign: 'center',
-            fill: '#1e293b',
-            fontSize: 15,
-            fontWeight: '800',
-            fontFamily: 'var(--font-sans)',
-          },
-          left: 'center',
-          top: -10,
-        },
         {
           type: 'text',
           style: {
@@ -118,46 +116,94 @@ export default function MonthlyChart({ transactions }: Props) {
             fontFamily: 'var(--font-sans)',
           },
           left: 'center',
-          top: 14,
+          top: -16,
+        },
+        {
+          type: 'text',
+          style: {
+            text: `฿${totalExpense.toLocaleString('th-TH')}`,
+            textAlign: 'center',
+            fill: '#1e293b',
+            fontSize: 15,
+            fontWeight: '800',
+            fontFamily: 'var(--font-sans)',
+          },
+          left: 'center',
+          top: 0,
         },
       ],
     }],
-    series: [{
-      type: 'pie',
-      radius: ['48%', '68%'],
-      center: ['50%', '50%'],
-      avoidLabelOverlap: true,
-      itemStyle: { borderRadius: 8, borderColor: '#fff', borderWidth: 3 },
-      label: {
-        show: true,
-        position: 'outside',
-        formatter: (p: PieTooltipParam) => `${p.percent.toFixed(0)}%`,
-        color: '#475569',
-        fontSize: 10,
-        fontWeight: 'bold',
-        fontFamily: 'var(--font-sans)',
-      },
-      labelLine: {
-        show: true,
-        length: 6,
-        length2: 4,
-        lineStyle: { color: '#cbd5e1', width: 1.5 },
-      },
-      emphasis: {
-        scaleSize: 5,
-        itemStyle: { shadowBlur: 20, shadowColor: 'rgba(99,102,241,0.4)' },
-      },
-      data: expenseByCategory.map((item, i) => ({
-        name: item.name,
-        value: item.value,
-        itemStyle: {
-          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: COLOR_GRADIENTS[i % COLOR_GRADIENTS.length][0] },
-            { offset: 1, color: COLOR_GRADIENTS[i % COLOR_GRADIENTS.length][1] },
-          ]),
+    series: [
+      {
+        type: 'pie',
+        radius: ['42%', '72%'],
+        center: ['50%', '50%'],
+        // ปิด hideOverlap (default ของ pie คือ true) — ไม่งั้น label manager ของ ECharts
+        // จะเห็น % กับป้ายไอคอนของอีก series เกยกันนิดเดียวแล้วตัดทิ้งเหลืออันเดียว
+        labelLayout: { hideOverlap: false },
+        itemStyle: { borderRadius: 4, borderColor: '#fff', borderWidth: 2 },
+        // เปอร์เซ็นต์สีขาวอยู่ในชิ้นโดนัท (ชิ้นเล็กกว่า 5% ใส่ตัวเลขไม่พอ — ดูจากลิสต์ด้านล่างแทน)
+        label: {
+          show: true,
+          position: 'inside',
+          formatter: (p: PieTooltipParam) => (p.percent >= 5 ? formatPercent(p.percent) : ''),
+          color: '#fff',
+          fontSize: 10,
+          fontWeight: 'bold',
+          fontFamily: 'var(--font-sans)',
         },
-      })),
-    }],
+        labelLine: { show: false },
+        emphasis: {
+          scaleSize: 5,
+          itemStyle: { shadowBlur: 20, shadowColor: 'rgba(99,102,241,0.4)' },
+        },
+        data: expenseByCategory.map((item, i) => ({
+          name: item.name,
+          value: item.value,
+          itemStyle: {
+            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+              { offset: 0, color: COLOR_GRADIENTS[i % COLOR_GRADIENTS.length][0] },
+              { offset: 1, color: COLOR_GRADIENTS[i % COLOR_GRADIENTS.length][1] },
+            ]),
+          },
+        })),
+      },
+      {
+        // วงแหวนโปร่งใส ใช้วางไอคอนหมวดเป็นวงกลมคร่อมขอบนอกของโดนัท (label อยู่กึ่งกลางที่ 77%)
+        type: 'pie',
+        radius: ['62%', '92%'],
+        center: ['50%', '50%'],
+        labelLayout: { hideOverlap: false },
+        silent: true,
+        itemStyle: { color: 'transparent' },
+        label: {
+          position: 'inside',
+          formatter: (p: PieTooltipParam) =>
+            expenseByCategory.find(c => c.name === p.name)?.icon ?? '',
+          fontSize: 12,
+          width: 22,
+          height: 22,
+          lineHeight: 22,
+          align: 'center',
+          backgroundColor: '#fff',
+          borderRadius: 12,
+          borderWidth: 2,
+          shadowBlur: 6,
+          shadowColor: 'rgba(15, 23, 42, 0.18)',
+          shadowOffsetY: 1,
+        },
+        labelLine: { show: false },
+        data: expenseByCategory.map((item, i) => {
+          const pct = totalExpense > 0 ? (item.value / totalExpense) * 100 : 0
+          return {
+            name: item.name,
+            value: item.value,
+            // ชิ้นเล็กมากไม่วางไอคอน ไม่งั้นป้ายซ้อนกันจนอ่านไม่ออก
+            label: { show: pct >= 4, borderColor: COLORS[i % COLORS.length] },
+          }
+        }),
+      },
+    ],
   } : null
 
   return (
@@ -175,44 +221,34 @@ export default function MonthlyChart({ transactions }: Props) {
 
           {/* Donut Chart */}
           <div className="flex justify-center">
-            <ReactECharts echarts={echarts} option={donutOption} style={{ height: 180, width: '100%', maxWidth: 220 }} />
+            <ReactECharts echarts={echarts} option={donutOption} style={{ height: 200, width: '100%', maxWidth: 240 }} />
           </div>
 
-          {/* Legend Grid */}
-          <div className="grid grid-cols-2 gap-1.5 mt-1">
+          {/* Category rows: ไอคอน → ชื่อ → % → จำนวนเงิน */}
+          <div className="divide-y divide-slate-100/70">
             {expenseByCategory.map((item, i) => {
               const pct = totalExpense > 0 ? (item.value / totalExpense) * 100 : 0
               const color = COLORS[i % COLORS.length]
               return (
                 <div
                   key={item.name}
-                  className="flex items-center gap-2 p-2 rounded-xl hover:bg-slate-50 transition-all group cursor-default"
+                  className="flex items-center gap-3 py-2.5 px-1 hover:bg-slate-50/70 rounded-xl transition-all group cursor-default"
                 >
-                  {/* Color bar */}
-                  <div className="w-1 h-8 rounded-full flex-shrink-0" style={{ background: color }} />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1 mb-0.5">
-                      <span className="text-sm leading-none">{getCategoryIcon(item.name)}</span>
-                      <span className="text-[11px] font-bold text-slate-700 truncate group-hover:text-slate-900">
-                        {getCategoryName(item.name)}
-                      </span>
-                    </div>
-                    <div className="flex items-baseline gap-1">
-                      <span className="text-xs font-extrabold text-slate-800">
-                        ฿{item.value.toLocaleString('th-TH')}
-                      </span>
-                      <span className="text-[10px] font-bold tabular-nums" style={{ color }}>
-                        {pct.toFixed(0)}%
-                      </span>
-                    </div>
-                    {/* Mini progress bar */}
-                    <div className="mt-1 h-1 w-full bg-slate-100 rounded-full overflow-hidden">
-                      <div
-                        className="h-full rounded-full transition-all duration-500"
-                        style={{ width: `${pct}%`, background: color }}
-                      />
-                    </div>
+                  <div
+                    className="w-9 h-9 rounded-full flex items-center justify-center text-base flex-shrink-0 border-2 bg-white shadow-sm"
+                    style={{ borderColor: color, backgroundColor: `${color}14` }}
+                  >
+                    {item.icon}
                   </div>
+                  <span className="text-[13px] font-bold text-slate-700 truncate flex-1 group-hover:text-slate-900">
+                    {item.name}
+                  </span>
+                  <span className="text-xs font-extrabold tabular-nums flex-shrink-0" style={{ color }}>
+                    {formatPercent(pct)}
+                  </span>
+                  <span className="text-[13px] font-extrabold text-slate-800 tabular-nums text-right w-20 flex-shrink-0">
+                    ฿{item.value.toLocaleString('th-TH')}
+                  </span>
                 </div>
               )
             })}

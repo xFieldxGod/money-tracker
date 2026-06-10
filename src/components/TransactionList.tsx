@@ -13,21 +13,25 @@ interface Props {
   onEdit: (tx: Transaction) => void
 }
 
+// custom category format: "emoji name" — อีโมจิหนึ่งตัวอาจยาวหลาย code point
+// (surrogate pair เช่น 🥤, variation selector เช่น 🏋️) ห้ามใช้ str[0] เด็ดขาด
+const EMOJI_PREFIX_RE = /^\p{Extended_Pictographic}[\p{Extended_Pictographic}\p{Emoji_Component}]*/u
+
 export function getCategoryIcon(category: string) {
   const preset = [...INCOME_CATEGORIES, ...EXPENSE_CATEGORIES].find(c => c.name === category)
   if (preset) return preset.icon
-  // custom category format: "emoji name"
-  const firstChar = category.trimStart()[0]
-  if (firstChar && /\p{Emoji}/u.test(firstChar)) return firstChar
+  const m = category.trimStart().match(EMOJI_PREFIX_RE)
+  if (m) return m[0]
   return '💳'
 }
 
 export function getCategoryName(category: string) {
   const preset = [...INCOME_CATEGORIES, ...EXPENSE_CATEGORIES].find(c => c.name === category)
   if (preset) return preset.name
-  const firstChar = category.trimStart()[0]
-  if (firstChar && /\p{Emoji}/u.test(firstChar)) return category.slice(firstChar.length).trim()
-  return category
+  const trimmed = category.trim()
+  const m = trimmed.match(EMOJI_PREFIX_RE)
+  if (m) return trimmed.slice(m[0].length).trim()
+  return trimmed
 }
 
 export default function TransactionList({ transactions, onDelete, onEdit }: Props) {

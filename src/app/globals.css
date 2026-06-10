@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 @theme {
-  --font-sans: var(--font-sans), var(--font-thai), system-ui, -apple-system, sans-serif;
+  --font-sans: var(--font-jakarta), var(--font-thai), system-ui, -apple-system, sans-serif;
   
   --shadow-premium: 0 10px 30px -10px rgba(0, 0, 0, 0.04), 0 1px 3px rgba(0, 0, 0, 0.02);
   --shadow-premium-lg: 0 20px 40px -15px rgba(0, 0, 0, 0.06), 0 1px 5px rgba(0, 0, 0, 0.02);

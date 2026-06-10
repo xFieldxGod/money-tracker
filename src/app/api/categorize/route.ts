@@ -40,16 +40,34 @@ function buildPrompt(req: CategorizeRequest): string {
 จงตอบเป็น JSON ตาม schema โดย:
 - type: "expense" (รายจ่าย) หรือ "income" (รายรับ) — ค่าเริ่มต้นคือ expense
 - amount: จำนวนเงินเป็นตัวเลข (บาท) ถ้าหาไม่เจอให้ใส่ 0
-- category: เลือกชื่อหมวดที่ "ตรงเป๊ะ" กับชื่อในลิสต์ของ type นั้น ถ้ามีอันที่เหมาะ
-  ถ้าไม่มีหมวดไหนเหมาะเลย ให้ตั้งชื่อหมวดใหม่สั้น ๆ เป็นภาษาไทย (เช่น "กีฬา") แล้วตั้ง isNew=true
+- category: ให้ใช้หมวดจากลิสต์ของ type นั้นก่อนเสมอ โดยคัดลอกชื่อให้ตรงเป๊ะทุกตัวอักษร (รวมอีโมจิ)
+  ถ้ากิจกรรมมีความหมายใกล้เคียงหมวดเดิม ให้ถือว่าเป็นหมวดเดิม อย่าตั้งหมวดใหม่ที่ความหมายซ้ำกับที่มีอยู่
+  ตั้งหมวดใหม่เฉพาะเมื่อไม่มีหมวดไหนเกี่ยวข้องเลยจริง ๆ — ชื่อสั้น ๆ ภาษาไทย ไม่ต้องมีอีโมจิ แล้วตั้ง isNew=true
 - isNew: true ถ้า category เป็นหมวดใหม่ที่ไม่อยู่ในลิสต์, false ถ้าเลือกจากลิสต์
-- icon: emoji 1 ตัวที่เหมาะกับหมวด (เช่น 🏸 สำหรับตีแบด)
-- note: คำอธิบายสั้น ๆ ของกิจกรรม/ร้าน (เช่น "ตีแบด") ถ้าไม่มีให้ใส่ ""
+- icon: emoji 1 ตัวที่เหมาะกับหมวด
+- note: คำอธิบายสั้น ๆ ของกิจกรรม/ร้าน (เช่น "ข้าวมันไก่") ถ้าไม่มีให้ใส่ ""
 - date: วันที่ในรูปแบบ YYYY-MM-DD ค่าเริ่มต้นคือวันนี้ รองรับคำว่า "เมื่อวาน" "วันนี้"`
 }
 
 function isValidDate(s: unknown): s is string {
   return typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s)
+}
+
+// เทียบชื่อหมวดแบบไม่สนอีโมจินำหน้า — AI ชอบตอบชื่อหมวดเดิมแต่ไม่ติดอีโมจิมาด้วย
+// (เช่น "เครื่องดื่ม" ทั้งที่ลิสต์มี "🥤 เครื่องดื่ม") ถ้าปล่อยผ่านจะกลายเป็นหมวดซ้ำ
+const EMOJI_PREFIX_RE = /^\p{Extended_Pictographic}[\p{Extended_Pictographic}\p{Emoji_Component}]*/u
+function stripEmojiPrefix(s: string): string {
+  return s.trim().replace(EMOJI_PREFIX_RE, '').trim()
+}
+
+function matchExistingCategory(category: string, list: unknown): string | null {
+  if (!Array.isArray(list)) return null
+  const target = stripEmojiPrefix(category)
+  for (const item of list) {
+    if (typeof item !== 'string') continue
+    if (item === category || stripEmojiPrefix(item) === target) return item
+  }
+  return null
 }
 
 export async function POST(request: Request) {
@@ -104,8 +122,15 @@ export async function POST(request: Request) {
     const type: TransactionType = out.type === 'income' ? 'income' : 'expense'
     const amountNum = Number(out.amount)
     const amount = Number.isFinite(amountNum) && amountNum > 0 ? amountNum : 0
-    const category = typeof out.category === 'string' && out.category.trim() ? out.category.trim() : 'อื่นๆ'
-    const isNew = out.isNew === true
+    const rawCategory = typeof out.category === 'string' && out.category.trim() ? out.category.trim() : 'อื่นๆ'
+    // ถ้าชื่อหมวดตรงกับหมวดเดิม (แม้ AI เขียนไม่เป๊ะ) ให้ใช้ชื่อจากลิสต์เสมอ
+    // และตัดสิน isNew จากลิสต์จริง ไม่เชื่อค่าที่ AI ตอบ
+    const matched = matchExistingCategory(
+      rawCategory,
+      type === 'income' ? body.incomeCategories : body.expenseCategories
+    )
+    const category = matched ?? rawCategory
+    const isNew = matched === null
     const note = typeof out.note === 'string' && out.note.trim() ? out.note.trim() : null
     const icon = typeof out.icon === 'string' && out.icon.trim() ? out.icon.trim() : suggestEmoji(category, type)
     const date = isValidDate(out.date) ? out.date : today
