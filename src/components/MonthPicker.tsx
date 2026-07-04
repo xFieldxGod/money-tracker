@@ -20,8 +20,8 @@ export default function MonthPicker({ value, onChange }: Props) {
         ‹
       </button>
 
-      <div className="flex flex-col items-center px-2">
-        <span className="font-semibold text-gray-900 min-w-[110px] text-center text-sm sm:text-base tabular-nums">
+      <div className="flex flex-col items-center px-1 sm:px-2">
+        <span className="font-semibold text-gray-900 min-w-[96px] sm:min-w-[110px] text-center text-xs sm:text-sm tabular-nums leading-tight">
           {format(value, 'MMMM yyyy', { locale: th })}
         </span>
         {!isCurrentMonth && (

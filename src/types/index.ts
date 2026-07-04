@@ -3,12 +3,24 @@ export type TransactionType = 'income' | 'expense'
 export interface Transaction {
   id: string
   user_id: string
-  type: TransactionType
+  type: TransactionType | 'transfer'
   amount: number
   category: string
   note: string | null
   date: string
   created_at: string
+  /** เป๋าต้นทาง — ไม่มี = รายการเก่า ให้ถือเป็นของเป๋าใบแรก */
+  wallet_id?: string
+  /** เป๋าปลายทาง — มีเฉพาะ type 'transfer' */
+  to_wallet_id?: string
+  /** วันที่ย้ายไปถังขยะ — มีค่า = อยู่ในถังขยะ */
+  deleted_at?: string
+}
+
+export interface Wallet {
+  id: string
+  name: string
+  icon: string
 }
 
 export interface Category {
@@ -21,6 +33,12 @@ export interface CustomCategory {
   name: string
   type: TransactionType
   icon: string
+}
+
+/** หมวดมาตรฐานที่ผู้ใช้กดลบ (ซ่อนต่อผู้ใช้ กู้คืนได้) */
+export interface HiddenPreset {
+  name: string
+  type: TransactionType
 }
 
 export const INCOME_CATEGORIES: Category[] = [

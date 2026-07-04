@@ -5,12 +5,16 @@ import { format } from 'date-fns'
 import { th } from 'date-fns/locale'
 import type { Transaction } from '@/types'
 import { INCOME_CATEGORIES, EXPENSE_CATEGORIES } from '@/types'
+import { signedAmount, walletName } from '@/lib/wallets'
 import ConfirmDialog from './ConfirmDialog'
+import type { Wallet } from '@/types'
 
 interface Props {
   transactions: Transaction[]
   onDelete: (id: string) => Promise<void>
   onEdit: (tx: Transaction) => void
+  wallets: Wallet[]
+  selectedWalletId: 'all' | string
 }
 
 // custom category format: "emoji name" — อีโมจิหนึ่งตัวอาจยาวหลาย code point
@@ -34,7 +38,7 @@ export function getCategoryName(category: string) {
   return trimmed
 }
 
-export default function TransactionList({ transactions, onDelete, onEdit }: Props) {
+export default function TransactionList({ transactions, onDelete, onEdit, wallets, selectedWalletId }: Props) {
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [confirmId, setConfirmId] = useState<string | null>(null)
 
@@ -74,7 +78,7 @@ export default function TransactionList({ transactions, onDelete, onEdit }: Prop
   return (
     <div className="space-y-4">
       {Object.entries(grouped).map(([date, items]) => {
-        const dayTotal = items.reduce((s, t) => s + (t.type === 'income' ? t.amount : -t.amount), 0)
+        const dayTotal = items.reduce((s, t) => s + signedAmount(t, selectedWalletId, wallets), 0)
         return (
           <div key={date} className="bg-white rounded-[24px] border border-slate-200/40 shadow-premium overflow-hidden transition-all hover:shadow-premium-lg">
             {/* Bank-App Style Clean Header */}
@@ -93,49 +97,68 @@ export default function TransactionList({ transactions, onDelete, onEdit }: Prop
             
             {/* Item List */}
             <div className="divide-y divide-slate-100/50">
-              {items.map(t => (
-                <div
-                  key={t.id}
-                  onClick={() => onEdit(t)}
-                  className="flex items-center gap-4 px-5 py-3.5 active:bg-slate-50/50 hover:bg-slate-50/30 transition-all cursor-pointer group"
-                >
-                  {/* Category icon block */}
-                  <div className={`w-11 h-11 rounded-[16px] flex items-center justify-center flex-shrink-0 text-xl border transition-all ${
-                    t.type === 'income' 
-                      ? 'bg-emerald-50 text-emerald-600 border-emerald-100/30' 
-                      : 'bg-rose-50 text-rose-600 border-rose-100/30'
-                  }`}>
-                    {getCategoryIcon(t.category)}
-                  </div>
-                  
-                  {/* Title & note */}
-                  <div className="flex-1 min-w-0">
-                    <p className="font-bold text-slate-800 text-sm tracking-tight">{getCategoryName(t.category)}</p>
-                    {t.note ? (
-                      <p className="text-xs text-slate-400 truncate mt-0.5 font-medium">{t.note}</p>
-                    ) : (
-                      <p className="text-[10px] text-slate-300 truncate mt-0.5 font-medium">ไม่มีบันทึกโน้ต</p>
-                    )}
-                  </div>
-
-                  {/* Amount with sign */}
-                  <span className={`font-extrabold text-sm sm:text-base flex-shrink-0 tabular-nums ${
-                    t.type === 'income' ? 'text-emerald-600' : 'text-rose-600'
-                  }`}>
-                    {t.type === 'income' ? '+' : '-'}
-                    {t.amount.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
-                  </span>
-
-                  {/* Sleek delete button */}
-                  <button
-                    onClick={(e) => handleDeleteClick(e, t.id)}
-                    disabled={deletingId === t.id}
-                    className="w-8 h-8 flex items-center justify-center rounded-xl text-slate-300 hover:text-rose-600 hover:bg-rose-50/60 hover:border hover:border-rose-100/50 transition-all flex-shrink-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 cursor-pointer"
+              {items.map(t => {
+                const amount = signedAmount(t, selectedWalletId, wallets)
+                const fromWallet = walletName(t.wallet_id, wallets)
+                const toWallet = walletName(t.to_wallet_id, wallets)
+                const isTransfer = t.type === 'transfer'
+                const amountClass = isTransfer
+                  ? selectedWalletId === 'all' || amount === 0
+                    ? 'text-slate-500'
+                    : amount > 0 ? 'text-emerald-600' : 'text-rose-600'
+                  : t.type === 'income' ? 'text-emerald-600' : 'text-rose-600'
+                return (
+                  <div
+                    key={t.id}
+                    onClick={() => onEdit(t)}
+                    className="flex items-center gap-4 px-5 py-3.5 active:bg-slate-50/50 hover:bg-slate-50/30 transition-all cursor-pointer group"
                   >
-                    {deletingId === t.id ? '⏳' : '🗑️'}
-                  </button>
-                </div>
-              ))}
+                    {/* Category icon block */}
+                    <div className={`w-11 h-11 rounded-[16px] flex items-center justify-center flex-shrink-0 text-xl border transition-all ${
+                      isTransfer
+                        ? 'bg-indigo-50 text-indigo-600 border-indigo-100/30'
+                        : t.type === 'income'
+                          ? 'bg-emerald-50 text-emerald-600 border-emerald-100/30'
+                          : 'bg-rose-50 text-rose-600 border-rose-100/30'
+                    }`}>
+                      {isTransfer ? '🔁' : getCategoryIcon(t.category)}
+                    </div>
+
+                    {/* Title & note */}
+                    <div className="flex-1 min-w-0">
+                      <p className="font-bold text-slate-800 text-sm tracking-tight">
+                        {isTransfer ? 'โอนเงิน' : getCategoryName(t.category)}
+                      </p>
+                      {isTransfer ? (
+                        <p className="text-xs text-slate-400 truncate mt-0.5 font-medium">
+                          {fromWallet.icon} {fromWallet.name} → {toWallet.icon} {toWallet.name}
+                        </p>
+                      ) : t.note ? (
+                        <p className="text-xs text-slate-400 truncate mt-0.5 font-medium">{t.note}</p>
+                      ) : (
+                        <p className="text-[10px] text-slate-300 truncate mt-0.5 font-medium">ไม่มีบันทึกโน้ต</p>
+                      )}
+                    </div>
+
+                    {/* Amount with sign */}
+                    <span className={`font-extrabold text-sm sm:text-base flex-shrink-0 tabular-nums ${amountClass}`}>
+                      {isTransfer
+                        ? selectedWalletId === 'all' || amount === 0 ? '' : amount > 0 ? '+' : '-'
+                        : t.type === 'income' ? '+' : '-'}
+                      {Math.abs(isTransfer ? (selectedWalletId === 'all' ? t.amount : amount) : t.amount).toLocaleString('th-TH', { minimumFractionDigits: 2 })}
+                    </span>
+
+                    {/* Sleek delete button */}
+                    <button
+                      onClick={(e) => handleDeleteClick(e, t.id)}
+                      disabled={deletingId === t.id}
+                      className="w-8 h-8 flex items-center justify-center rounded-xl text-slate-300 hover:text-rose-600 hover:bg-rose-50/60 hover:border hover:border-rose-100/50 transition-all flex-shrink-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 cursor-pointer"
+                    >
+                      {deletingId === t.id ? '⏳' : '🗑️'}
+                    </button>
+                  </div>
+                )
+              })}
             </div>
           </div>
         )
@@ -143,7 +166,11 @@ export default function TransactionList({ transactions, onDelete, onEdit }: Prop
 
       {confirmTx && (
         <ConfirmDialog
-          message={`${getCategoryIcon(confirmTx.category)} ${getCategoryName(confirmTx.category)} · ${confirmTx.amount.toLocaleString('th-TH')} บาท`}
+          message={
+            confirmTx.type === 'transfer'
+              ? `🔁 โอนเงิน · ${confirmTx.amount.toLocaleString('th-TH')} บาท`
+              : `${getCategoryIcon(confirmTx.category)} ${getCategoryName(confirmTx.category)} · ${confirmTx.amount.toLocaleString('th-TH')} บาท`
+          }
           onConfirm={handleConfirmDelete}
           onCancel={() => setConfirmId(null)}
         />

@@ -2,16 +2,22 @@
 
 import { useState, useEffect, useMemo, useId } from 'react'
 import { collection, query, where, getDocs, orderBy } from 'firebase/firestore'
+import { format, addMonths, subMonths } from 'date-fns'
+import { th } from 'date-fns/locale'
 import { db } from '@/lib/firebase'
-import type { Transaction } from '@/types'
+import { signedAmount, txMatchesWallet } from '@/lib/wallets'
+import { isActiveTransaction } from '@/lib/trash'
+import type { Transaction, Wallet } from '@/types'
 
-type Range = '1W' | '1M' | '3M' | 'ALL'
+type Range = '1W' | '1M' | '3M' | 'ALL' | 'MONTH'
 
 interface Props {
   income: number
   expense: number
   transactions: Transaction[]
   userId: string
+  selectedWalletId: 'all' | string
+  wallets: Wallet[]
 }
 
 function fmt(n: number) {
@@ -22,7 +28,7 @@ type Granularity = 'day' | 'week' | 'month'
 
 // เลือกความถี่ของการรวมข้อมูลตามช่วงเวลาที่เลือก เพื่อให้จำนวนจุดบนกราฟคงที่
 function granularityFor(range: Range): Granularity {
-  if (range === '1W' || range === '1M') return 'day'
+  if (range === '1W' || range === '1M' || range === 'MONTH') return 'day'
   if (range === '3M') return 'week'
   return 'month' // ALL
 }
@@ -57,7 +63,7 @@ function smoothPath(coords: { x: number; y: number }[]): string {
   return d
 }
 
-function StockChart({ transactions, range }: { transactions: Transaction[]; range: Range }) {
+function StockChart({ transactions, range, selectedWalletId, wallets }: { transactions: Transaction[]; range: Range; selectedWalletId: 'all' | string; wallets: Wallet[] }) {
   const gradId = useId()
   const points = useMemo(() => {
     const sorted = [...transactions].sort((a, b) => {
@@ -69,12 +75,12 @@ function StockChart({ transactions, range }: { transactions: Transaction[]; rang
     let balance = 0
     const buckets = new Map<string, number>()
     for (const tx of sorted) {
-      balance += tx.type === 'income' ? tx.amount : -tx.amount
+      balance += signedAmount(tx, selectedWalletId, wallets)
       buckets.set(bucketKey(tx.date, g), balance)
     }
     const ordered = [...buckets.entries()].sort((a, b) => a[0].localeCompare(b[0]))
     return [{ balance: 0 }, ...ordered.map(([, bal]) => ({ balance: bal }))]
-  }, [transactions, range])
+  }, [transactions, range, selectedWalletId, wallets])
 
   if (points.length < 2) {
     return (
@@ -138,32 +144,45 @@ function StockChart({ transactions, range }: { transactions: Transaction[]; rang
   )
 }
 
-function getRangeStart(range: Range): string {
+// ขอบเขตวันที่ของช่วงที่เลือก (to มีเฉพาะโหมดรายเดือน)
+// ใช้ format ตามเวลาท้องถิ่น ไม่ใช้ toISOString เพื่อไม่ให้วันเพี้ยนจาก timezone
+function getRangeBounds(range: Range, month: Date): { from: string; to?: string } {
+  if (range === 'MONTH') {
+    const ym = format(month, 'yyyy-MM')
+    return { from: `${ym}-01`, to: `${ym}-31` }
+  }
   const now = new Date()
   if (range === '1W') { now.setDate(now.getDate() - 7) }
   else if (range === '1M') { now.setMonth(now.getMonth() - 1) }
   else if (range === '3M') { now.setMonth(now.getMonth() - 3) }
-  else return '2000-01-01'
-  return now.toISOString().slice(0, 10)
+  else return { from: '2000-01-01' }
+  return { from: format(now, 'yyyy-MM-dd') }
 }
 
-export default function SummaryCards({ income, expense, transactions, userId }: Props) {
+export default function SummaryCards({ income, expense, transactions, userId, selectedWalletId, wallets }: Props) {
   const balance = income - expense
   const isPositive = balance >= 0
   const [range, setRange] = useState<Range>('ALL')
+  const [chartMonth, setChartMonth] = useState(() => new Date())
   const [allTx, setAllTx] = useState<Transaction[]>([])
   const [loadingChart, setLoadingChart] = useState(false)
 
   useEffect(() => {
     if (!userId) return
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoadingChart(true)
-    const fromDate = getRangeStart(range)
-    const q = range === 'ALL'
-      ? query(collection(db, 'transactions'), where('user_id', '==', userId), orderBy('date', 'asc'))
-      : query(collection(db, 'transactions'), where('user_id', '==', userId), where('date', '>=', fromDate), orderBy('date', 'asc'))
+    const { from, to } = getRangeBounds(range, chartMonth)
+    const constraints = [
+      where('user_id', '==', userId),
+      ...(range !== 'ALL' ? [where('date', '>=', from)] : []),
+      ...(to ? [where('date', '<=', to)] : []),
+      orderBy('date', 'asc'),
+    ]
+    const q = query(collection(db, 'transactions'), ...constraints)
     getDocs(q).then(snap => {
       const txs = snap.docs
         .map(d => ({ id: d.id, ...d.data() } as Transaction))
+        .filter(isActiveTransaction)
         .sort((a, b) => {
           if (a.date !== b.date) return a.date.localeCompare(b.date)
           return a.created_at.localeCompare(b.created_at)
@@ -171,25 +190,26 @@ export default function SummaryCards({ income, expense, transactions, userId }: 
       setAllTx(txs)
       setLoadingChart(false)
     })
-  }, [userId, range])
+  }, [userId, range, chartMonth])
 
   // merge transactions prop (เดือนปัจจุบัน) เข้า allTx แบบ realtime
   const chartTx = useMemo(() => {
-    if (allTx.length === 0) return allTx
-    const fromDate = getRangeStart(range)
+    const { from, to } = getRangeBounds(range, chartMonth)
     const merged = new Map<string, Transaction>()
     for (const tx of allTx) merged.set(tx.id, tx)
     for (const tx of transactions) {
-      if (tx.date >= fromDate) merged.set(tx.id, tx)
+      if (tx.date >= from && (!to || tx.date <= to)) merged.set(tx.id, tx)
     }
-    return [...merged.values()].sort((a, b) => {
-      if (a.date !== b.date) return a.date.localeCompare(b.date)
-      return a.created_at.localeCompare(b.created_at)
-    })
-  }, [allTx, transactions, range])
+    return [...merged.values()]
+      .filter(tx => txMatchesWallet(tx, selectedWalletId, wallets))
+      .sort((a, b) => {
+        if (a.date !== b.date) return a.date.localeCompare(b.date)
+        return a.created_at.localeCompare(b.created_at)
+      })
+  }, [allTx, transactions, range, chartMonth, selectedWalletId, wallets])
 
-  const RANGES: Range[] = ['1W', '1M', '3M', 'ALL']
-  const RANGE_LABELS: Record<Range, string> = { '1W': '1W', '1M': '1M', '3M': '3M', 'ALL': 'All' }
+  const RANGES: Range[] = ['1W', '1M', '3M', 'ALL', 'MONTH']
+  const RANGE_LABELS: Record<Range, string> = { '1W': '1W', '1M': '1M', '3M': '3M', 'ALL': 'All', 'MONTH': 'เดือน' }
 
   return (
     <div className="relative overflow-hidden rounded-[28px] bg-gradient-to-tr from-[#d4f7e6]/55 via-[#e0e7ff]/55 to-[#f3e8ff]/55 border border-white/80 backdrop-blur-xl p-6 sm:p-7 shadow-premium-lg transition-all hover:shadow-premium-xl">
@@ -207,12 +227,12 @@ export default function SummaryCards({ income, expense, transactions, userId }: 
               {isPositive ? '' : '-'}฿{fmt(Math.abs(balance))}
             </span>
           </div>
-          <p className="text-[10px] font-bold text-slate-400/80">สถานะบัญชีปัจจุบัน</p>
+          <p className="text-[10px] font-bold text-slate-400/80">ยอดสุทธิเดือนนี้</p>
         </div>
 
         {/* Range selector + chart */}
         <div>
-          <div className="flex justify-end gap-1 mb-1.5">
+          <div className="flex flex-wrap justify-end gap-1 mb-1.5">
             {RANGES.map(r => (
               <button
                 key={r}
@@ -228,12 +248,35 @@ export default function SummaryCards({ income, expense, transactions, userId }: 
               </button>
             ))}
           </div>
+          {range === 'MONTH' && (
+            <div className="flex items-center justify-end gap-1 mb-1.5">
+              <button
+                type="button"
+                onClick={() => setChartMonth(m => subMonths(m, 1))}
+                aria-label="เดือนก่อนหน้า"
+                className="w-6 h-6 flex items-center justify-center rounded-lg bg-white/60 text-slate-400 hover:text-slate-600 text-sm font-bold transition-all cursor-pointer"
+              >
+                ‹
+              </button>
+              <span className="text-[10px] font-bold text-slate-500 tabular-nums min-w-[86px] text-center">
+                {format(chartMonth, 'MMMM yyyy', { locale: th })}
+              </span>
+              <button
+                type="button"
+                onClick={() => setChartMonth(m => addMonths(m, 1))}
+                aria-label="เดือนถัดไป"
+                className="w-6 h-6 flex items-center justify-center rounded-lg bg-white/60 text-slate-400 hover:text-slate-600 text-sm font-bold transition-all cursor-pointer"
+              >
+                ›
+              </button>
+            </div>
+          )}
           {loadingChart ? (
             <div className="h-16 flex items-center justify-center opacity-30">
               <div className="w-full h-0.5 bg-slate-200 rounded-full animate-pulse" />
             </div>
           ) : (
-            <StockChart transactions={chartTx} range={range} />
+            <StockChart transactions={chartTx} range={range} selectedWalletId={selectedWalletId} wallets={wallets} />
           )}
         </div>
 
