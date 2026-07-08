@@ -35,7 +35,7 @@ export default function DebtsPage() {
         </div>
         <button
           onClick={() => setShowForm(true)}
-          className="flex items-center gap-2 bg-gradient-to-r from-rose-500 to-rose-600 hover:from-rose-600 hover:to-rose-700 text-white text-sm font-bold px-4 py-2.5 rounded-2xl shadow-lg shadow-rose-100 transition-all cursor-pointer"
+          className="flex items-center gap-2 bg-rose-500 hover:bg-rose-600 text-white text-sm font-bold px-4 py-2.5 rounded-2xl shadow-md transition-all cursor-pointer"
         >
           <span className="text-base leading-none">+</span>
           ยืมเงิน
@@ -45,12 +45,12 @@ export default function DebtsPage() {
       {/* Summary cards */}
       <div className="grid grid-cols-2 gap-3">
         <div className="bg-white rounded-2xl p-4 border border-rose-100 shadow-sm">
-          <p className="text-xs font-bold text-rose-400 uppercase tracking-wider mb-1">ค้างจ่ายทั้งหมด</p>
+          <p className="text-xs font-bold text-rose-400 mb-1">ค้างจ่ายทั้งหมด</p>
           <p className="text-xl font-extrabold text-rose-600">฿{totalDebt.toLocaleString('th-TH')}</p>
           <p className="text-[11px] text-slate-400 mt-0.5">{debts.filter(d => d.status === 'active').length} รายการ</p>
         </div>
         <div className="bg-white rounded-2xl p-4 border border-emerald-100 shadow-sm">
-          <p className="text-xs font-bold text-emerald-500 uppercase tracking-wider mb-1">คืนแล้ว</p>
+          <p className="text-xs font-bold text-emerald-500 mb-1">คืนแล้ว</p>
           <p className="text-xl font-extrabold text-emerald-600">{totalPaid} รายการ</p>
           <p className="text-[11px] text-slate-400 mt-0.5">
             ฿{debts.filter(d => d.status === 'paid').reduce((s, d) => s + d.amount, 0).toLocaleString('th-TH')}

@@ -5,6 +5,7 @@ import { collection, query, where, getDocs, orderBy } from 'firebase/firestore'
 import { format, addMonths, subMonths } from 'date-fns'
 import { th } from 'date-fns/locale'
 import { db } from '@/lib/firebase'
+import { ArrowUpRight, ArrowDownRight, ChevronLeft, ChevronRight } from 'lucide-react'
 import { signedAmount, txMatchesWallet } from '@/lib/wallets'
 import { isActiveTransaction } from '@/lib/trash'
 import type { Transaction, Wallet } from '@/types'
@@ -86,7 +87,7 @@ function StockChart({ transactions, range, selectedWalletId, wallets }: { transa
     return (
       <div className="w-full h-16 select-none opacity-20">
         <svg className="w-full h-full" viewBox="0 0 300 40" preserveAspectRatio="none">
-          <path d="M0 20 L300 20" fill="none" stroke="#6366f1" strokeWidth="2" strokeDasharray="6 4" />
+          <path d="M0 20 L300 20" fill="none" stroke="#ec4899" strokeWidth="2" strokeDasharray="6 4" />
         </svg>
       </div>
     )
@@ -212,14 +213,11 @@ export default function SummaryCards({ income, expense, transactions, userId, se
   const RANGE_LABELS: Record<Range, string> = { '1W': '1W', '1M': '1M', '3M': '3M', 'ALL': 'All', 'MONTH': 'เดือน' }
 
   return (
-    <div className="relative overflow-hidden rounded-[28px] bg-gradient-to-tr from-[#d4f7e6]/55 via-[#e0e7ff]/55 to-[#f3e8ff]/55 border border-white/80 backdrop-blur-xl p-6 sm:p-7 shadow-premium-lg transition-all hover:shadow-premium-xl">
-      <div className="absolute -top-10 -right-10 w-28 h-28 rounded-full bg-emerald-200/20 blur-xl pointer-events-none" />
-      <div className="absolute -bottom-8 -left-8 w-28 h-28 rounded-full bg-indigo-200/25 blur-xl pointer-events-none" />
-
+    <div className="relative overflow-hidden rounded-[28px] bg-white border border-slate-200/50 p-6 sm:p-7 shadow-premium transition-all hover:shadow-premium-lg">
       <div className="relative space-y-3">
         {/* Total Balance */}
         <div className="space-y-1">
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+          <p className="text-[10px] font-bold text-slate-400">
             Total Balance (ยอดคงเหลือ)
           </p>
           <div className="flex items-baseline gap-1">
@@ -249,14 +247,14 @@ export default function SummaryCards({ income, expense, transactions, userId, se
             ))}
           </div>
           {range === 'MONTH' && (
-            <div className="flex items-center justify-end gap-1 mb-1.5">
+            <div className="flex items-center justify-end gap-1.5 mb-1.5">
               <button
                 type="button"
                 onClick={() => setChartMonth(m => subMonths(m, 1))}
                 aria-label="เดือนก่อนหน้า"
-                className="w-6 h-6 flex items-center justify-center rounded-lg bg-white/60 text-slate-400 hover:text-slate-600 text-sm font-bold transition-all cursor-pointer"
+                className="w-6 h-6 flex items-center justify-center rounded-lg bg-slate-50 text-slate-400 hover:text-slate-600 transition-all cursor-pointer"
               >
-                ‹
+                <ChevronLeft className="w-3.5 h-3.5" />
               </button>
               <span className="text-[10px] font-bold text-slate-500 tabular-nums min-w-[86px] text-center">
                 {format(chartMonth, 'MMMM yyyy', { locale: th })}
@@ -265,9 +263,9 @@ export default function SummaryCards({ income, expense, transactions, userId, se
                 type="button"
                 onClick={() => setChartMonth(m => addMonths(m, 1))}
                 aria-label="เดือนถัดไป"
-                className="w-6 h-6 flex items-center justify-center rounded-lg bg-white/60 text-slate-400 hover:text-slate-600 text-sm font-bold transition-all cursor-pointer"
+                className="w-6 h-6 flex items-center justify-center rounded-lg bg-slate-50 text-slate-400 hover:text-slate-600 transition-all cursor-pointer"
               >
-                ›
+                <ChevronRight className="w-3.5 h-3.5" />
               </button>
             </div>
           )}
@@ -283,17 +281,21 @@ export default function SummaryCards({ income, expense, transactions, userId, se
         {/* Income / Expense */}
         <div className="grid grid-cols-2 gap-4 border-t border-slate-200/30 pt-3">
           <div className="space-y-1">
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Income (รายรับ)</p>
+            <p className="text-[10px] font-bold text-slate-400">Income (รายรับ)</p>
             <div className="flex items-center gap-1.5 text-emerald-600">
               <span className="text-base sm:text-lg font-extrabold tabular-nums">฿{fmt(income)}</span>
-              <span className="text-xs font-bold bg-emerald-50 px-1.5 py-0.5 rounded-md border border-emerald-100/50">↗</span>
+              <span className="inline-flex items-center justify-center bg-emerald-50 p-1 rounded-md border border-emerald-100/50">
+                <ArrowUpRight className="w-3.5 h-3.5" strokeWidth={2.5} />
+              </span>
             </div>
           </div>
           <div className="space-y-1">
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Expenses (รายจ่าย)</p>
+            <p className="text-[10px] font-bold text-slate-400">Expenses (รายจ่าย)</p>
             <div className="flex items-center gap-1.5 text-rose-600">
               <span className="text-base sm:text-lg font-extrabold tabular-nums">฿{fmt(expense)}</span>
-              <span className="text-xs font-bold bg-rose-50 px-1.5 py-0.5 rounded-md border border-rose-100/50">↘</span>
+              <span className="inline-flex items-center justify-center bg-rose-50 p-1 rounded-md border border-rose-100/50">
+                <ArrowDownRight className="w-3.5 h-3.5" strokeWidth={2.5} />
+              </span>
             </div>
           </div>
         </div>

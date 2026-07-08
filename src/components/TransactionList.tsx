@@ -8,6 +8,7 @@ import { INCOME_CATEGORIES, EXPENSE_CATEGORIES } from '@/types'
 import { signedAmount, walletName } from '@/lib/wallets'
 import ConfirmDialog from './ConfirmDialog'
 import type { Wallet } from '@/types'
+import { Inbox, ArrowLeftRight, Trash2, Loader2 } from 'lucide-react'
 
 interface Props {
   transactions: Transaction[]
@@ -60,8 +61,8 @@ export default function TransactionList({ transactions, onDelete, onEdit, wallet
   if (transactions.length === 0) {
     return (
       <div className="bg-white rounded-[28px] p-10 text-center border border-slate-200/50 shadow-premium">
-        <div className="w-16 h-16 mx-auto mb-4 rounded-[20px] bg-gradient-to-br from-indigo-50 to-purple-50 flex items-center justify-center text-3xl shadow-inner">
-          📭
+        <div className="w-16 h-16 mx-auto mb-4 rounded-[20px] bg-slate-50 flex items-center justify-center shadow-inner">
+          <Inbox className="w-7 h-7 text-slate-400" />
         </div>
         <p className="text-slate-700 font-bold text-sm">ยังไม่มีรายการในเดือนนี้</p>
         <p className="text-slate-400 text-xs mt-1.5 font-medium">เริ่มต้นบันทึกรายรับรายจ่ายได้ด้วยปุ่ม + บันทึก</p>
@@ -83,7 +84,7 @@ export default function TransactionList({ transactions, onDelete, onEdit, wallet
           <div key={date} className="bg-white rounded-[24px] border border-slate-200/40 shadow-premium overflow-hidden transition-all hover:shadow-premium-lg">
             {/* Bank-App Style Clean Header */}
             <div className="flex items-center justify-between px-5 py-3.5 bg-slate-50/50 border-b border-slate-200/20">
-              <p className="text-xs font-bold text-slate-500 tracking-wide">
+              <p className="text-xs font-bold text-slate-500">
                 {format(new Date(date), 'EEEE d MMMM yyyy', { locale: th })}
               </p>
               <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold border tabular-nums shadow-sm ${
@@ -121,7 +122,7 @@ export default function TransactionList({ transactions, onDelete, onEdit, wallet
                           ? 'bg-emerald-50 text-emerald-600 border-emerald-100/30'
                           : 'bg-rose-50 text-rose-600 border-rose-100/30'
                     }`}>
-                      {isTransfer ? '🔁' : getCategoryIcon(t.category)}
+                      {isTransfer ? <ArrowLeftRight className="w-5 h-5 text-indigo-600" /> : getCategoryIcon(t.category)}
                     </div>
 
                     {/* Title & note */}
@@ -154,7 +155,11 @@ export default function TransactionList({ transactions, onDelete, onEdit, wallet
                       disabled={deletingId === t.id}
                       className="w-8 h-8 flex items-center justify-center rounded-xl text-slate-300 hover:text-rose-600 hover:bg-rose-50/60 hover:border hover:border-rose-100/50 transition-all flex-shrink-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 cursor-pointer"
                     >
-                      {deletingId === t.id ? '⏳' : '🗑️'}
+                      {deletingId === t.id ? (
+                        <Loader2 className="w-4 h-4 animate-spin text-rose-500" />
+                      ) : (
+                        <Trash2 className="w-4 h-4" />
+                      )}
                     </button>
                   </div>
                 )
@@ -167,9 +172,14 @@ export default function TransactionList({ transactions, onDelete, onEdit, wallet
       {confirmTx && (
         <ConfirmDialog
           message={
-            confirmTx.type === 'transfer'
-              ? `🔁 โอนเงิน · ${confirmTx.amount.toLocaleString('th-TH')} บาท`
-              : `${getCategoryIcon(confirmTx.category)} ${getCategoryName(confirmTx.category)} · ${confirmTx.amount.toLocaleString('th-TH')} บาท`
+            confirmTx.type === 'transfer' ? (
+              <span className="flex items-center justify-center gap-1">
+                <ArrowLeftRight className="w-3.5 h-3.5 text-indigo-500 inline" />
+                <span>โอนเงิน · {confirmTx.amount.toLocaleString('th-TH')} บาท</span>
+              </span>
+            ) : (
+              `${getCategoryIcon(confirmTx.category)} ${getCategoryName(confirmTx.category)} · ${confirmTx.amount.toLocaleString('th-TH')} บาท`
+            )
           }
           onConfirm={handleConfirmDelete}
           onCancel={() => setConfirmId(null)}

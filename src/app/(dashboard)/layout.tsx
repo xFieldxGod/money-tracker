@@ -50,12 +50,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   if (!user) return null
 
   return (
-    <div className="relative min-h-screen bg-slate-50/60 overflow-hidden">
-      {/* Dynamic Aesthetic Background Orbs */}
-      <div className="absolute top-[8%] left-[5%] w-80 h-80 rounded-full bg-indigo-300/15 blur-[100px] pointer-events-none animate-float-orb-1" />
-      <div className="absolute bottom-[12%] right-[5%] w-96 h-96 rounded-full bg-purple-300/15 blur-[120px] pointer-events-none animate-float-orb-2" />
-
-      <main className="relative max-w-4xl mx-auto px-4 py-6 z-10">{children}</main>
+    <div className="relative min-h-screen bg-slate-50/60">
+      <main className="relative max-w-4xl mx-auto px-4 py-6">{children}</main>
     </div>
   )
 }

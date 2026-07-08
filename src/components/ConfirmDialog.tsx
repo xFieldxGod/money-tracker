@@ -1,7 +1,9 @@
 'use client'
 
+import { LogOut, Download, Trash2 } from 'lucide-react'
+
 interface Props {
-  message: string
+  message: React.ReactNode
   onConfirm: () => void
   onCancel: () => void
   confirmLabel?: string
@@ -19,15 +21,29 @@ export default function ConfirmDialog({
     ? 'bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800'
     : 'bg-rose-500 hover:bg-rose-600 active:bg-rose-700'
 
-  const icon = confirmLabel === 'ออกจากระบบ' ? '👋' : confirmColor === 'indigo' ? '📥' : '🗑️'
+  const IconComponent = confirmLabel === 'ออกจากระบบ'
+    ? LogOut
+    : confirmColor === 'indigo'
+      ? Download
+      : Trash2
+
+  const iconContainerClass = confirmLabel === 'ออกจากระบบ'
+    ? 'bg-rose-50 border-rose-100/50 text-rose-500'
+    : confirmColor === 'indigo'
+      ? 'bg-indigo-50 border-indigo-100/50 text-indigo-500'
+      : 'bg-rose-50 border-rose-100/50 text-rose-500'
 
   return (
     <div className="fixed inset-0 bg-slate-900/30 backdrop-blur-sm flex items-center justify-center z-[60] px-6">
       <div className="bg-white rounded-[24px] border border-slate-100 shadow-premium-lg w-full max-w-xs p-6 space-y-5">
         <div className="text-center space-y-2">
-          <div className="text-4xl filter drop-shadow-sm mb-1">{icon}</div>
+          <div className="flex justify-center mb-1">
+            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center border shadow-sm ${iconContainerClass}`}>
+              <IconComponent className="w-5 h-5" strokeWidth={2.2} />
+            </div>
+          </div>
           <p className="font-extrabold text-slate-800 tracking-tight text-base">{confirmLabel}?</p>
-          <p className="text-xs text-slate-400 font-medium leading-relaxed px-1">{message}</p>
+          <div className="text-xs text-slate-400 font-medium leading-relaxed px-1">{message}</div>
         </div>
         <div className="flex gap-2.5">
           <button

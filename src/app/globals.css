@@ -2,16 +2,58 @@
 
 @theme {
   --font-sans: var(--font-jakarta), var(--font-thai), system-ui, -apple-system, sans-serif;
-  
+  --font-display: var(--font-mali), var(--font-thai), system-ui, sans-serif;
+
   --shadow-premium: 0 10px 30px -10px rgba(0, 0, 0, 0.04), 0 1px 3px rgba(0, 0, 0, 0.02);
   --shadow-premium-lg: 0 20px 40px -15px rgba(0, 0, 0, 0.06), 0 1px 5px rgba(0, 0, 0, 0.02);
-  --shadow-premium-indigo: 0 20px 40px -15px rgba(99, 102, 241, 0.15), 0 1px 5px rgba(99, 102, 241, 0.05);
+  --shadow-premium-indigo: 0 20px 40px -15px rgba(236, 72, 153, 0.15), 0 1px 5px rgba(236, 72, 153, 0.05);
+
+  /* ═══ ธีมแมวมาลี 🎀 — remap สีทั้งแอปจากจุดเดียว ═══
+     indigo (สีหลักเดิม) → ชมพูโบว์มาลี */
+  --color-indigo-50: #fdf2f8;
+  --color-indigo-100: #fce7f3;
+  --color-indigo-200: #fbcfe8;
+  --color-indigo-300: #f9a8d4;
+  --color-indigo-400: #f472b6;
+  --color-indigo-500: #ec4899;
+  --color-indigo-600: #db2777;
+  --color-indigo-700: #be185d;
+  --color-indigo-800: #9d174d;
+  --color-indigo-900: #831843;
+
+  /* purple (สีตกแต่ง gradient/orb) → ชมพูม่วงอ่อน */
+  --color-purple-100: #fae8ff;
+  --color-purple-200: #f5d0fe;
+  --color-purple-300: #f0abfc;
+  --color-purple-400: #e879f9;
+  --color-purple-500: #d946ef;
+  --color-purple-600: #c026d3;
+
+  /* slate (สีพื้น/ตัวอักษร) → เทาอมชมพูอุ่น ๆ ให้ทั้งเว็บนวลเหมือนขนแมวขาว */
+  --color-slate-50: #fbf7f8;
+  --color-slate-100: #f6eef0;
+  --color-slate-200: #eddfe3;
+  --color-slate-300: #dcc6cd;
+  --color-slate-400: #a8949b;
+  --color-slate-500: #8b747c;
+  --color-slate-600: #6d5860;
+  --color-slate-700: #55424a;
+  --color-slate-800: #3e2e35;
+  --color-slate-900: #2a1f24;
 }
 
 body {
   font-family: var(--font-sans);
   -webkit-tap-highlight-color: transparent;
-  background-color: #f8fafc;
+  background-color: #fdf5f8;
+  /* กันซูมจากการแตะสองครั้ง (double-tap zoom) — เสริมกับ viewport lock ใน layout.tsx
+     เพราะ iOS Safari บางเวอร์ชันไม่สนใจ user-scalable=no */
+  touch-action: pan-x pan-y;
+}
+
+/* หัวข้อใช้ฟอนต์ลายมือ Mali ให้ความรู้สึกอบอุ่น ทำมือ ไม่แข็งทื่อ */
+h1, h2, h3, .font-display {
+  font-family: var(--font-display);
 }
 
 /* Chrome, Safari, Edge, Opera: Hide input number spinners */

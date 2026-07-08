@@ -24,6 +24,23 @@ export function useCustomCategories(userId: string) {
     await setDoc(doc(db, 'users', userId), { customCategories: next }, { merge: true })
   }
 
+  async function updateCustomCategory(oldName: string, type: TransactionType, updated: CustomCategory) {
+    const next = customCategories.map(c => (c.name === oldName && c.type === type ? updated : c))
+    setCustomCategories(next)
+    await setDoc(doc(db, 'users', userId), { customCategories: next }, { merge: true })
+  }
+
+  /** เปลี่ยนชื่อหมวดมาตรฐาน = ซ่อนหมวดเดิม แล้วสร้างเป็นหมวดของผู้ใช้แทน (กู้คืนหมวดเดิมได้) */
+  async function convertPresetToCustom(presetName: string, type: TransactionType, newCat: CustomCategory) {
+    const nextHidden = hiddenPresets.some(h => h.name === presetName && h.type === type)
+      ? hiddenPresets
+      : [...hiddenPresets, { name: presetName, type }]
+    const nextCustom = [...customCategories, newCat]
+    setHiddenPresets(nextHidden)
+    setCustomCategories(nextCustom)
+    await setDoc(doc(db, 'users', userId), { hiddenPresets: nextHidden, customCategories: nextCustom }, { merge: true })
+  }
+
   async function removeCustomCategory(name: string) {
     const next = customCategories.filter(c => c.name !== name)
     setCustomCategories(next)
@@ -47,6 +64,8 @@ export function useCustomCategories(userId: string) {
     customCategories,
     hiddenPresets,
     addCustomCategory,
+    updateCustomCategory,
+    convertPresetToCustom,
     removeCustomCategory,
     hidePresetCategory,
     restorePresetCategory,

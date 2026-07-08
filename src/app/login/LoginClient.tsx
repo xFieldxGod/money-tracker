@@ -4,21 +4,28 @@ import { signInWithPopup } from 'firebase/auth'
 import { auth, googleProvider } from '@/lib/firebase'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
-import Image from 'next/image'
+import { Cat, TriangleAlert, Copy, Check } from 'lucide-react'
 import { isInAppBrowser } from '@/lib/browserDetect'
 
 export default function LoginClient() {
   const [loading, setLoading] = useState(false)
   const [inApp] = useState(() => isInAppBrowser())
   const [copied, setCopied] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const router = useRouter()
 
   async function signInWithGoogle() {
     setLoading(true)
+    setError(null)
     try {
       await signInWithPopup(auth, googleProvider)
       router.push('/')
-    } catch {
+    } catch (e) {
+      const code = (e as { code?: string })?.code
+      // ผู้ใช้กดปิดหน้าต่างเอง ไม่ต้องขึ้น error
+      if (code !== 'auth/popup-closed-by-user' && code !== 'auth/cancelled-popup-request') {
+        setError('เข้าสู่ระบบไม่สำเร็จ กรุณาลองอีกครั้ง — หากยังไม่ได้ ให้เปิดลิงก์ใน Chrome หรือ Safari โดยตรง')
+      }
       setLoading(false)
     }
   }
@@ -31,23 +38,18 @@ export default function LoginClient() {
 
   return (
     <div className="relative min-h-screen flex items-center justify-center overflow-hidden bg-slate-50 p-4">
-      {/* Dynamic Aesthetic Background Orbs */}
-      <div className="absolute top-[20%] left-[10%] w-72 h-72 rounded-full bg-indigo-300/30 blur-[80px] pointer-events-none animate-float-orb-1" />
-      <div className="absolute bottom-[20%] right-[10%] w-80 h-80 rounded-full bg-purple-300/25 blur-[90px] pointer-events-none animate-float-orb-2" />
-
-      {/* Floating Glassmorphic Login Card */}
-      <div className="relative w-full max-w-sm bg-white/70 backdrop-blur-xl border border-white/60 shadow-premium-lg rounded-3xl p-8 sm:p-10 space-y-8 transition-premium">
+      <div className="relative w-full max-w-sm bg-white border border-slate-100 shadow-premium-lg rounded-3xl p-8 sm:p-10 space-y-8">
         {/* App Branding */}
         <div className="text-center space-y-3">
-          <div className="inline-flex w-16 h-16 rounded-2xl overflow-hidden shadow-premium ring-1 ring-black/5 mb-2">
-            <Image src="/logo.png" alt="Money Tracker logo" width={64} height={64} className="w-full h-full object-cover" priority />
+          <div className="inline-flex w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-200 to-indigo-400 items-center justify-center text-white shadow-premium ring-1 ring-black/5 mb-2">
+            <Cat className="w-8 h-8" strokeWidth={2} />
           </div>
           <div>
-            <h1 className="text-3xl font-extrabold tracking-tight bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+            <h1 className="text-3xl font-bold tracking-tight text-indigo-600">
               Money Tracker
             </h1>
             <p className="text-slate-500 text-sm mt-1.5 font-medium leading-relaxed">
-              บันทึกรายรับรายจ่ายส่วนตัว<br />อย่างง่ายและงดงาม
+              บันทึกรายรับรายจ่ายส่วนตัว<br />ฉบับน่ารักสไตล์แมวขาวโบว์ชมพู
             </p>
           </div>
         </div>
@@ -57,7 +59,7 @@ export default function LoginClient() {
           <div className="space-y-5">
             <div className="bg-amber-50/80 backdrop-blur border border-amber-100 rounded-2xl p-4 space-y-2 text-left">
               <p className="font-semibold text-amber-800 text-sm flex items-center gap-1.5">
-                <span>⚠️</span> ไม่สามารถเข้าสู่ระบบได้
+                <TriangleAlert className="w-4 h-4" /> ไม่สามารถเข้าสู่ระบบได้
               </p>
               <p className="text-amber-700 text-xs leading-relaxed font-medium">
                 Google ไม่อนุญาตให้ล็อกอินผ่านเบราว์เซอร์ภายในของแอป (LINE, Messenger, Social Media) 
@@ -66,7 +68,7 @@ export default function LoginClient() {
             </div>
 
             <div className="space-y-2">
-              <p className="text-xs text-slate-500 font-semibold text-center uppercase tracking-wider">
+              <p className="text-xs text-slate-500 font-semibold text-center">
                 วิธีเปิดใน Chrome หรือ Safari:
               </p>
               <ol className="text-xs text-slate-600 text-left space-y-2 bg-slate-100/50 backdrop-blur border border-slate-200/50 rounded-2xl p-4 font-medium">
@@ -85,7 +87,9 @@ export default function LoginClient() {
               onClick={copyLink}
               className="w-full py-3 px-4 bg-white border border-slate-200 rounded-2xl text-sm text-slate-700 hover:bg-slate-50 active:bg-slate-100 transition-all font-semibold shadow-sm hover:shadow-premium cursor-pointer"
             >
-              {copied ? '✓ คัดลอกลิงก์สำเร็จ' : '📋 คัดลอกลิงก์เพื่อเปิดเอง'}
+              <span className="inline-flex items-center justify-center gap-2">
+                {copied ? <><Check className="w-4 h-4 text-emerald-600" /> คัดลอกลิงก์สำเร็จ</> : <><Copy className="w-4 h-4" /> คัดลอกลิงก์เพื่อเปิดเอง</>}
+              </span>
             </button>
           </div>
         ) : (
@@ -116,6 +120,11 @@ export default function LoginClient() {
                 </>
               )}
             </button>
+            {error && (
+              <p className="flex items-start justify-center gap-1.5 text-xs text-rose-600 font-semibold bg-rose-50/80 border border-rose-100 rounded-2xl px-4 py-3 leading-relaxed">
+                <TriangleAlert className="w-4 h-4 flex-shrink-0" /> <span>{error}</span>
+              </p>
+            )}
             <p className="text-center text-xs text-slate-400 font-medium leading-relaxed">
               ปลอดภัย เชื่อถือได้ · ล็อกอินผ่านระบบทางการของ Google
             </p>

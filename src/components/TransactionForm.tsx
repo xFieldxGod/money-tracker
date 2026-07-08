@@ -5,6 +5,7 @@ import { INCOME_CATEGORIES, EXPENSE_CATEGORIES } from '@/types'
 import { suggestEmoji } from '@/lib/emojiSuggest'
 import { resolveWalletId } from '@/lib/wallets'
 import type { Transaction, TransactionType, CustomCategory, HiddenPreset, Wallet } from '@/types'
+import { X, Plus, Pencil, Check, Undo2 } from 'lucide-react'
 import DatePicker from './DatePicker'
 import ConfirmDialog from './ConfirmDialog'
 
@@ -17,6 +18,11 @@ interface Props {
   customCategories?: CustomCategory[]
   onAddCustomCategory?: (cat: CustomCategory) => Promise<void>
   onRemoveCustomCategory?: (name: string) => Promise<void>
+  onRenameCategory?: (
+    oldCat: { name: string; icon: string; isPreset: boolean },
+    updated: { name: string; icon: string },
+    type: TransactionType,
+  ) => Promise<void>
   hiddenPresets?: HiddenPreset[]
   onHidePresetCategory?: (name: string, type: TransactionType) => Promise<void>
   onRestorePresetCategory?: (name: string, type: TransactionType) => Promise<void>
@@ -26,7 +32,7 @@ interface Props {
 
 const COMMON_EMOJIS = ['🍜','☕','🛵','🚗','⛽','🏠','💊','🎬','🛍️','📱','💡','📚','🎮','✈️','🍺','🎁','💻','📈','💼','🛒','💳','🐾','🏋️','🎵','🍕','🧋','📦','🏖️']
 
-export default function TransactionForm({ onSubmit, onClose, initialData, prefill, customCategories = [], onAddCustomCategory, onRemoveCustomCategory, hiddenPresets = [], onHidePresetCategory, onRestorePresetCategory, wallets = [], defaultWalletId }: Props) {
+export default function TransactionForm({ onSubmit, onClose, initialData, prefill, customCategories = [], onAddCustomCategory, onRemoveCustomCategory, onRenameCategory, hiddenPresets = [], onHidePresetCategory, onRestorePresetCategory, wallets = [], defaultWalletId }: Props) {
   const initialType: TransactionType = initialData?.type === 'income'
     ? 'income'
     : initialData?.type === 'expense'
@@ -46,6 +52,7 @@ export default function TransactionForm({ onSubmit, onClose, initialData, prefil
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const [managingCategories, setManagingCategories] = useState(false)
   const [categoryToDelete, setCategoryToDelete] = useState<{ name: string; icon: string; isPreset: boolean } | null>(null)
+  const [editingCategory, setEditingCategory] = useState<{ name: string; icon: string; isPreset: boolean } | null>(null)
   const [walletId, setWalletId] = useState(() => resolveWalletId(initialData?.wallet_id ?? defaultWalletId, wallets))
 
   const presetCategories = type === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES
@@ -62,7 +69,33 @@ export default function TransactionForm({ onSubmit, onClose, initialData, prefil
 
   function handleCustomNameChange(value: string) {
     setCustomName(value)
-    if (value.trim()) setCustomEmoji(suggestEmoji(value, type))
+    // ตอนแก้ไขหมวดเดิม ไม่เดา emoji ใหม่ทับไอคอนที่ผู้ใช้ตั้งไว้
+    if (!editingCategory && value.trim()) setCustomEmoji(suggestEmoji(value, type))
+  }
+
+  function startEditCategory(cat: { name: string; icon: string; isPreset: boolean }) {
+    setEditingCategory(cat)
+    setIsCustom(false)
+    setCustomName(cat.name)
+    setCustomEmoji(cat.icon)
+    setShowEmojiPicker(false)
+  }
+
+  function cancelEditCategory() {
+    setEditingCategory(null)
+    setCustomName('')
+    setCustomEmoji('')
+    setShowEmojiPicker(false)
+  }
+
+  async function handleRenameConfirm() {
+    if (!editingCategory || !customName.trim() || !onRenameCategory) return
+    const updated = { name: customName.trim(), icon: customEmoji || editingCategory.icon }
+    const oldFull = editingCategory.isPreset ? editingCategory.name : `${editingCategory.icon} ${editingCategory.name}`
+    const target = editingCategory
+    cancelEditCategory()
+    if (category === oldFull) setCategory(`${updated.icon} ${updated.name}`)
+    await onRenameCategory(target, updated, type)
   }
 
   async function handleCustomConfirm() {
@@ -90,27 +123,27 @@ export default function TransactionForm({ onSubmit, onClose, initialData, prefil
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-5 border-b border-slate-100 sticky top-0 bg-white/90 backdrop-blur z-10">
           <h2 className="font-extrabold text-slate-800 tracking-tight text-base">
-            {isEditMode ? '📝 แก้ไขรายการบันทึก' : '➕ บันทึกรายการใหม่'}
+            {isEditMode ? 'แก้ไขรายการบันทึก' : 'บันทึกรายการใหม่'}
           </h2>
-          <button 
+          <button
             type="button"
-            onClick={onClose} 
-            className="w-8 h-8 rounded-full bg-slate-100 text-slate-400 hover:text-slate-700 hover:bg-slate-200 transition-all flex items-center justify-center text-sm leading-none cursor-pointer"
+            onClick={onClose}
+            className="w-8 h-8 rounded-full bg-slate-100 text-slate-400 hover:text-slate-700 hover:bg-slate-200 transition-all flex items-center justify-center cursor-pointer"
           >
-            ✕
+            <X className="w-4 h-4" />
           </button>
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-5">
           {/* Type Toggle */}
           <div>
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 block">ประเภทรายการ</label>
+            <label className="text-[10px] font-bold text-slate-400 mb-2 block">ประเภทรายการ</label>
             <div className="flex gap-1.5 bg-slate-100 p-1.5 rounded-[18px]">
               {(['expense', 'income'] as const).map(t => (
                 <button 
                   key={t} 
                   type="button"
-                  onClick={() => { setType(t); setCategory(''); setIsCustom(false); setCustomName('') }}
+                  onClick={() => { setType(t); setCategory(''); setIsCustom(false); setCustomName(''); setEditingCategory(null) }}
                   className={`flex-1 py-2.5 rounded-[13px] text-xs font-extrabold transition-all cursor-pointer ${
                     type === t
                       ? t === 'expense' 
@@ -119,7 +152,7 @@ export default function TransactionForm({ onSubmit, onClose, initialData, prefil
                       : 'text-slate-500 hover:text-slate-800'
                   }`}
                 >
-                  {t === 'expense' ? '💸 รายจ่าย (Expense)' : '💵 รายรับ (Income)'}
+                  {t === 'expense' ? 'รายจ่าย (Expense)' : 'รายรับ (Income)'}
                 </button>
               ))}
             </div>
@@ -127,7 +160,7 @@ export default function TransactionForm({ onSubmit, onClose, initialData, prefil
 
           {wallets.length > 1 && (
             <div>
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 block">เป๋าตัง</label>
+              <label className="text-[10px] font-bold text-slate-400 mb-2 block">เป๋าตัง</label>
               <div className="flex gap-2 overflow-x-auto pb-1">
                 {wallets.map(wallet => (
                   <button
@@ -149,7 +182,7 @@ export default function TransactionForm({ onSubmit, onClose, initialData, prefil
 
           {/* Amount */}
           <div>
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 block">จำนวนเงิน (THB)</label>
+            <label className="text-[10px] font-bold text-slate-400 mb-2 block">จำนวนเงิน (THB)</label>
             <div className="relative">
               <span className="absolute left-4 top-1/2 -translate-y-1/2 font-extrabold text-slate-400 text-lg">฿</span>
               <input
@@ -164,18 +197,20 @@ export default function TransactionForm({ onSubmit, onClose, initialData, prefil
           {/* Category */}
           <div>
             <div className="flex items-center justify-between mb-2.5">
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">เลือกหมวดหมู่</label>
+              <label className="text-[10px] font-bold text-slate-400">เลือกหมวดหมู่</label>
               {(onRemoveCustomCategory || onHidePresetCategory) && (
                 <button
                   type="button"
-                  onClick={() => setManagingCategories(v => !v)}
+                  onClick={() => { setManagingCategories(v => !v); if (managingCategories) cancelEditCategory() }}
                   className={`text-[10px] font-bold px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
                     managingCategories
                       ? 'bg-indigo-600 text-white shadow-sm'
                       : 'bg-slate-100 text-slate-500 hover:text-slate-700 hover:bg-slate-200'
                   }`}
                 >
-                  {managingCategories ? '✓ เสร็จสิ้น' : '🖊️ แก้ไขหมวดหมู่'}
+                  <span className="inline-flex items-center gap-1">
+                    {managingCategories ? <><Check className="w-3 h-3" /> เสร็จสิ้น</> : <><Pencil className="w-3 h-3" /> แก้ไขหมวดหมู่</>}
+                  </span>
                 </button>
               )}
             </div>
@@ -185,9 +220,11 @@ export default function TransactionForm({ onSubmit, onClose, initialData, prefil
                 <div key={c.name} className="relative">
                   <button
                     type="button"
-                    onClick={() => selectPreset(c.name)}
+                    onClick={() => managingCategories && onRenameCategory
+                      ? startEditCategory({ name: c.name, icon: c.icon, isPreset: true })
+                      : selectPreset(c.name)}
                     className={`w-full py-2.5 px-3 rounded-2xl text-xs border transition-all flex items-center justify-center gap-1.5 font-bold cursor-pointer ${
-                      category === c.name
+                      (managingCategories ? editingCategory?.isPreset && editingCategory.name === c.name : category === c.name)
                         ? 'border-indigo-500 bg-indigo-50/60 text-indigo-700 shadow-sm'
                         : 'border-slate-200 text-slate-600 bg-white hover:bg-slate-50/40 hover:border-slate-300'
                     }`}
@@ -199,9 +236,9 @@ export default function TransactionForm({ onSubmit, onClose, initialData, prefil
                     <button
                       type="button"
                       onClick={e => { e.stopPropagation(); setCategoryToDelete({ name: c.name, icon: c.icon, isPreset: true }) }}
-                      className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-rose-500 text-white text-[9px] font-bold flex items-center justify-center cursor-pointer shadow-sm"
+                      className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-rose-500 text-white flex items-center justify-center cursor-pointer shadow-sm"
                     >
-                      ✕
+                      <X className="w-2.5 h-2.5" strokeWidth={3} />
                     </button>
                   )}
                 </div>
@@ -214,9 +251,11 @@ export default function TransactionForm({ onSubmit, onClose, initialData, prefil
                   <div key={c.name} className="relative group">
                     <button
                       type="button"
-                      onClick={() => selectPreset(fullName)}
+                      onClick={() => managingCategories && onRenameCategory
+                        ? startEditCategory({ name: c.name, icon: c.icon, isPreset: false })
+                        : selectPreset(fullName)}
                       className={`w-full py-2.5 px-3 rounded-2xl text-xs border transition-all flex items-center justify-center gap-1.5 font-bold cursor-pointer ${
-                        category === fullName
+                        (managingCategories ? !editingCategory?.isPreset && editingCategory?.name === c.name : category === fullName)
                           ? 'border-indigo-500 bg-indigo-50/60 text-indigo-700 shadow-sm'
                           : 'border-slate-200 text-slate-600 bg-white hover:bg-slate-50/40 hover:border-slate-300'
                       }`}
@@ -228,9 +267,9 @@ export default function TransactionForm({ onSubmit, onClose, initialData, prefil
                       <button
                         type="button"
                         onClick={e => { e.stopPropagation(); setCategoryToDelete({ name: c.name, icon: c.icon, isPreset: false }) }}
-                        className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-rose-500 text-white text-[9px] font-bold flex items-center justify-center cursor-pointer shadow-sm"
+                        className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-rose-500 text-white flex items-center justify-center cursor-pointer shadow-sm"
                       >
-                        ✕
+                        <X className="w-2.5 h-2.5" strokeWidth={3} />
                       </button>
                     )}
                   </div>
@@ -240,40 +279,51 @@ export default function TransactionForm({ onSubmit, onClose, initialData, prefil
               {/* Add new custom */}
               <button 
                 type="button"
-                onClick={() => { setIsCustom(true); setCategory('') }}
+                onClick={() => { if (editingCategory) cancelEditCategory(); setIsCustom(true); setCategory('') }}
                 className={`py-2.5 px-3 rounded-2xl text-xs border transition-all flex items-center justify-center gap-1.5 font-bold cursor-pointer ${
                   isCustom
                     ? 'border-indigo-500 bg-indigo-50/60 text-indigo-700 shadow-sm'
                     : 'border-dashed border-slate-300 text-slate-400 bg-slate-50/20 hover:bg-slate-50 hover:text-slate-600'
                 }`}
               >
-                <span>➕</span>
+                <Plus className="w-3.5 h-3.5" />
                 <span className="truncate">เพิ่มใหม่</span>
               </button>
             </div>
 
+            {managingCategories && onRenameCategory && (
+              <p className="mt-2 text-[10px] font-semibold text-slate-400">
+                แตะที่หมวดเพื่อแก้ชื่อ/ไอคอน • กดปุ่มกากบาทเพื่อลบ
+              </p>
+            )}
+
             {/* Hidden presets: restore chips (โหมดแก้ไขเท่านั้น) */}
             {managingCategories && onRestorePresetCategory && hiddenForType.length > 0 && (
               <div className="mt-3 p-3 bg-slate-50/70 border border-slate-200/60 rounded-2xl">
-                <p className="text-[10px] font-bold text-slate-400 mb-2 uppercase tracking-wider">หมวดที่ลบไป (กดเพื่อกู้คืน)</p>
+                <p className="text-[10px] font-bold text-slate-400 mb-2">หมวดที่ลบไป (กดเพื่อกู้คืน)</p>
                 <div className="flex flex-wrap gap-1.5">
                   {hiddenForType.map(c => (
                     <button
                       key={c.name}
                       type="button"
                       onClick={() => void onRestorePresetCategory(c.name, type)}
-                      className="text-[11px] font-bold px-2.5 py-1.5 rounded-xl bg-white border border-slate-200 text-slate-500 hover:text-emerald-600 hover:border-emerald-200 hover:bg-emerald-50/50 transition-all cursor-pointer"
+                      className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1.5 rounded-xl bg-white border border-slate-200 text-slate-500 hover:text-emerald-600 hover:border-emerald-200 hover:bg-emerald-50/50 transition-all cursor-pointer"
                     >
-                      ↩ {c.icon} {c.name}
+                      <Undo2 className="w-3 h-3" /> {c.icon} {c.name}
                     </button>
                   ))}
                 </div>
               </div>
             )}
 
-            {/* Custom input */}
-            {isCustom && (
+            {/* Custom input / แก้ไขหมวดเดิม */}
+            {(isCustom || editingCategory) && (
               <div className="mt-3.5 p-4 bg-indigo-50/50 border border-indigo-100/60 rounded-2xl space-y-3.5 shadow-inner">
+                {editingCategory && (
+                  <p className="text-[10px] font-bold text-indigo-500">
+                    แก้ไขหมวด: {editingCategory.icon} {editingCategory.name}
+                  </p>
+                )}
                 <div className="flex gap-2.5 items-center">
                   <button 
                     type="button"
@@ -294,7 +344,7 @@ export default function TransactionForm({ onSubmit, onClose, initialData, prefil
 
                 {showEmojiPicker && (
                   <div className="bg-white rounded-xl border border-indigo-100 p-2.5 shadow-sm max-h-[160px] overflow-y-auto">
-                    <p className="text-[10px] font-bold text-slate-400 mb-2 uppercase tracking-wider">เลือกไอคอน Emoji</p>
+                    <p className="text-[10px] font-bold text-slate-400 mb-2">เลือกไอคอน Emoji</p>
                     <div className="flex flex-wrap gap-1.5">
                       {COMMON_EMOJIS.map(e => (
                         <button 
@@ -310,34 +360,55 @@ export default function TransactionForm({ onSubmit, onClose, initialData, prefil
                   </div>
                 )}
 
-                {customName.trim() && (
-                  <div className="flex items-center justify-between pt-1">
-                    <span className="text-[11px] text-slate-500 font-semibold">
+                {(customName.trim() || editingCategory) && (
+                  <div className="flex items-center justify-between pt-1 gap-2">
+                    <span className="text-[11px] text-slate-500 font-semibold min-w-0 truncate">
                       ตัวอย่างหมวดหมู่: <span className="font-extrabold text-indigo-600">{customEmoji} {customName}</span>
                     </span>
-                    <button 
-                      type="button" 
-                      onClick={handleCustomConfirm}
-                      className="text-xs text-indigo-600 font-extrabold hover:text-indigo-800 bg-white border border-indigo-200/60 px-3 py-1 rounded-xl shadow-sm hover:shadow active:scale-95 transition-all cursor-pointer"
-                    >
-                      บันทึกไว้ใช้ ✓
-                    </button>
+                    {editingCategory ? (
+                      <div className="flex gap-1.5 flex-shrink-0">
+                        <button
+                          type="button"
+                          onClick={cancelEditCategory}
+                          className="text-xs text-slate-400 font-extrabold hover:text-slate-600 bg-white border border-slate-200/60 px-3 py-1 rounded-xl shadow-sm hover:shadow active:scale-95 transition-all cursor-pointer"
+                        >
+                          ยกเลิก
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleRenameConfirm}
+                          disabled={!customName.trim()}
+                          className="text-xs text-indigo-600 font-extrabold hover:text-indigo-800 bg-white border border-indigo-200/60 px-3 py-1 rounded-xl shadow-sm hover:shadow active:scale-95 transition-all cursor-pointer disabled:opacity-50"
+                        >
+                          บันทึกชื่อใหม่
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={handleCustomConfirm}
+                        className="text-xs text-indigo-600 font-extrabold hover:text-indigo-800 bg-white border border-indigo-200/60 px-3 py-1 rounded-xl shadow-sm hover:shadow active:scale-95 transition-all cursor-pointer flex-shrink-0"
+                      >
+                        บันทึกไว้ใช้
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
             )}
 
             {/* Selected custom */}
-            {category && !presetCategories.find(c => c.name === category) && !savedCustomCategories.find(c => `${c.icon} ${c.name}` === category) && !isCustom && (
+            {category && !presetCategories.find(c => c.name === category) && !savedCustomCategories.find(c => `${c.icon} ${c.name}` === category) && !isCustom && !editingCategory && (
               <div className="mt-2.5 flex items-center gap-2 text-xs text-indigo-700 bg-indigo-50/70 border border-indigo-100/50 px-3 py-2 rounded-xl">
-                <span className="font-semibold">✓ เลือกหมวดหมู่:</span>
+                <Check className="w-3.5 h-3.5" />
+                <span className="font-semibold">เลือกหมวดหมู่:</span>
                 <span className="font-extrabold">{category}</span>
                 <button 
                   type="button" 
                   onClick={() => setCategory('')} 
                   className="ml-auto text-slate-400 hover:text-rose-500 w-5 h-5 rounded-full hover:bg-rose-50 flex items-center justify-center transition-all cursor-pointer"
                 >
-                  ✕
+                  <X className="w-3 h-3" />
                 </button>
               </div>
             )}
@@ -345,13 +416,13 @@ export default function TransactionForm({ onSubmit, onClose, initialData, prefil
 
           {/* Date */}
           <div>
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 block">วันที่ทำรายการ</label>
+            <label className="text-[10px] font-bold text-slate-400 mb-2 block">วันที่ทำรายการ</label>
             <DatePicker value={date} onChange={setDate} />
           </div>
 
           {/* Note */}
           <div>
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 block">หมายเหตุ (คำอธิบายเพิ่มเติม)</label>
+            <label className="text-[10px] font-bold text-slate-400 mb-2 block">หมายเหตุ (คำอธิบายเพิ่มเติม)</label>
             <input 
               type="text" 
               value={note} 
@@ -366,7 +437,7 @@ export default function TransactionForm({ onSubmit, onClose, initialData, prefil
             disabled={loading || !amount || !category}
             className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-bold text-sm hover:bg-indigo-700 disabled:opacity-50 transition-all shadow-md shadow-indigo-100 hover:shadow-indigo-200 active:scale-[0.99] cursor-pointer mt-2"
           >
-            {loading ? '⏳ กำลังบันทึกข้อมูล...' : isEditMode ? '✓ บันทึกการแก้ไข' : '✓ ยืนยันบันทึกรายการ'}
+            {loading ? 'กำลังบันทึกข้อมูล...' : isEditMode ? 'บันทึกการแก้ไข' : 'ยืนยันบันทึกรายการ'}
           </button>
         </form>
       </div>
@@ -382,6 +453,9 @@ export default function TransactionForm({ onSubmit, onClose, initialData, prefil
           confirmColor="red"
           onCancel={() => setCategoryToDelete(null)}
           onConfirm={() => {
+            if (editingCategory?.name === categoryToDelete.name && editingCategory.isPreset === categoryToDelete.isPreset) {
+              cancelEditCategory()
+            }
             if (categoryToDelete.isPreset) {
               if (onHidePresetCategory) void onHidePresetCategory(categoryToDelete.name, type)
               if (category === categoryToDelete.name) setCategory('')

@@ -5,6 +5,7 @@ import type { Debt } from '@/types'
 import { differenceInDays, parseISO, format } from 'date-fns'
 import { th } from 'date-fns/locale'
 import DatePicker from '@/components/DatePicker'
+import { Building2, ChevronUp, ChevronDown, CheckCircle2, X, Trash2 } from 'lucide-react'
 
 function fmtDate(dateStr: string) {
   return format(new Date(dateStr + 'T00:00:00'), 'd MMM yyyy', { locale: th })
@@ -46,7 +47,7 @@ function DebtProgress({ debt }: { debt: Debt }) {
       </div>
       <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
         <div
-          className="h-full rounded-full transition-all duration-500 bg-gradient-to-r from-indigo-400 to-indigo-600"
+          className="h-full rounded-full transition-all duration-500 bg-indigo-600"
           style={{ width: `${pct}%` }}
         />
       </div>
@@ -116,7 +117,7 @@ export default function DebtList({ debts, onAddPayment, onMarkPaid, onDelete, on
   if (debts.length === 0) {
     return (
       <div className="bg-white rounded-2xl p-10 text-center border border-slate-100">
-        <p className="text-4xl mb-3">🎉</p>
+        <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto mb-3" />
         <p className="font-bold text-slate-700 mb-1">ไม่มีหนี้สิน</p>
         <p className="text-sm text-slate-400">กดปุ่ม + เพื่อบันทึกการยืมเงิน</p>
       </div>
@@ -128,7 +129,7 @@ export default function DebtList({ debts, onAddPayment, onMarkPaid, onDelete, on
       {/* Active debts */}
       {active.length > 0 && (
         <section>
-          <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">
+          <h3 className="text-xs font-bold text-slate-500 mb-3">
             ค้างอยู่ · {active.length} รายการ
           </h3>
           <div className="space-y-3">
@@ -138,8 +139,8 @@ export default function DebtList({ debts, onAddPayment, onMarkPaid, onDelete, on
                 <div className="p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-10 h-10 rounded-2xl bg-rose-50 flex items-center justify-center text-xl flex-shrink-0">
-                        🏦
+                      <div className="w-10 h-10 rounded-2xl bg-rose-50 flex items-center justify-center text-rose-500 flex-shrink-0">
+                        <Building2 className="w-5 h-5" />
                       </div>
                       <div className="min-w-0">
                         <p className="font-extrabold text-slate-900 text-sm truncate">{debt.lender}</p>
@@ -180,9 +181,10 @@ export default function DebtList({ debts, onAddPayment, onMarkPaid, onDelete, on
                     </button>
                     <button
                       onClick={() => setExpandedId(expandedId === debt.id ? null : debt.id)}
-                      className="px-3 text-xs font-bold bg-slate-50 hover:bg-slate-100 text-slate-500 rounded-xl transition-all cursor-pointer"
+                      className="px-3 text-xs font-bold bg-slate-50 hover:bg-slate-100 text-slate-500 rounded-xl transition-all flex items-center justify-center cursor-pointer"
+                      aria-label="ประวัติการคืน"
                     >
-                      {expandedId === debt.id ? '▲' : '▼'}
+                      {expandedId === debt.id ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                     </button>
                   </div>
                 </div>
@@ -190,7 +192,7 @@ export default function DebtList({ debts, onAddPayment, onMarkPaid, onDelete, on
                 {/* Payment history */}
                 {expandedId === debt.id && debt.payments.length > 0 && (
                   <div className="border-t border-slate-100 bg-slate-50/50 px-4 py-3 space-y-2">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">ประวัติการคืน</p>
+                    <p className="text-[10px] font-bold text-slate-400 mb-2">ประวัติการคืน</p>
                     {debt.payments.map(p => (
                       <div key={p.id} className="flex justify-between items-center text-xs">
                         <div className="flex items-center gap-2">
@@ -222,14 +224,16 @@ export default function DebtList({ debts, onAddPayment, onMarkPaid, onDelete, on
       {/* Paid debts */}
       {paid.length > 0 && (
         <section>
-          <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">
+          <h3 className="text-xs font-bold text-slate-500 mb-3">
             คืนแล้ว · {paid.length} รายการ
           </h3>
           <div className="space-y-2">
             {paid.map(debt => (
               <div key={debt.id} className="bg-white rounded-2xl border border-slate-100 p-4 flex items-center justify-between opacity-70">
                 <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-emerald-50 flex items-center justify-center text-lg">✅</div>
+                  <div className="w-9 h-9 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-500 shrink-0">
+                    <CheckCircle2 className="w-5 h-5" />
+                  </div>
                   <div>
                     <p className="font-bold text-slate-700 text-sm">{debt.lender}</p>
                     <p className="text-xs text-slate-400">ยืมเมื่อ {fmtDate(debt.borrow_date)}</p>
@@ -292,7 +296,7 @@ export default function DebtList({ debts, onAddPayment, onMarkPaid, onDelete, on
               <button
                 onClick={submitPayment}
                 disabled={saving}
-                className="w-full bg-gradient-to-r from-indigo-500 to-indigo-600 text-white font-bold py-3 rounded-2xl transition-all disabled:opacity-60 cursor-pointer"
+                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-2xl transition-all disabled:opacity-60 cursor-pointer"
               >
                 {saving ? 'กำลังบันทึก...' : 'บันทึก'}
               </button>
@@ -308,7 +312,9 @@ export default function DebtList({ debts, onAddPayment, onMarkPaid, onDelete, on
           <div className="relative w-full sm:max-w-md bg-white sm:rounded-3xl rounded-t-3xl shadow-2xl p-6 z-10">
             <div className="flex items-center justify-between mb-5">
               <h2 className="text-base font-extrabold text-slate-900">แก้ไขรายการหนี้</h2>
-              <button onClick={() => setEditForm(null)} className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 cursor-pointer">✕</button>
+              <button onClick={() => setEditForm(null)} className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-600 cursor-pointer">
+                <X className="w-4 h-4" />
+              </button>
             </div>
             <div className="space-y-4">
               <div>
@@ -363,7 +369,7 @@ export default function DebtList({ debts, onAddPayment, onMarkPaid, onDelete, on
               <button
                 onClick={submitEdit}
                 disabled={saving}
-                className="w-full bg-gradient-to-r from-indigo-500 to-indigo-600 text-white font-bold py-3 rounded-2xl transition-all disabled:opacity-60 cursor-pointer"
+                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-2xl transition-all disabled:opacity-60 cursor-pointer"
               >
                 {saving ? 'กำลังบันทึก...' : 'บันทึกการแก้ไข'}
               </button>
@@ -377,7 +383,9 @@ export default function DebtList({ debts, onAddPayment, onMarkPaid, onDelete, on
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setDeletingId(null)} />
           <div className="relative bg-white rounded-3xl shadow-2xl p-6 w-full max-w-xs z-10 text-center">
-            <p className="text-2xl mb-3">🗑️</p>
+            <div className="flex justify-center opacity-70 mb-3">
+              <Trash2 className="w-10 h-10 text-rose-500" />
+            </div>
             <p className="font-bold text-slate-900 mb-1">ลบรายการนี้?</p>
             <p className="text-sm text-slate-400 mb-5">ไม่สามารถกู้คืนได้</p>
             <div className="flex gap-3">

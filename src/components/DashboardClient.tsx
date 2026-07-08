@@ -13,7 +13,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { format } from 'date-fns'
 import { th } from 'date-fns/locale'
 import { EXPENSE_CATEGORIES, INCOME_CATEGORIES } from '@/types'
-import type { Transaction, CustomCategory } from '@/types'
+import type { Transaction, CustomCategory, TransactionType } from '@/types'
 import type { ParsedExpense } from '@/lib/parseExpense'
 import dynamic from 'next/dynamic'
 import SummaryCards from './SummaryCards'
@@ -24,6 +24,7 @@ import QuickAddBar from './QuickAddBar'
 import { useWallets } from '@/lib/useWallets'
 import { txMatchesWallet, resolveWalletId, walletName } from '@/lib/wallets'
 import { groupTrashByMonth, isActiveTransaction, isTrashExpired, type TrashMonthGroup } from '@/lib/trash'
+import { ArrowLeftRight, Settings, Trash2, Download, ChartPie, Plus, List, HandCoins, Wallet } from 'lucide-react'
 import TrashBin from './TrashBin'
 
 const MonthlyChart = dynamic(() => import('./MonthlyChart'), {
@@ -78,9 +79,10 @@ export default function DashboardClient({ userId }: Props) {
   const [showTrashBin, setShowTrashBin] = useState(false)
   const [trashItems, setTrashItems] = useState<TrashMonthGroup[]>([])
   const [restoringMonth, setRestoringMonth] = useState<string | null>(null)
-  const { customCategories, hiddenPresets, addCustomCategory, removeCustomCategory, hidePresetCategory, restorePresetCategory } = useCustomCategories(userId)
+  const { customCategories, hiddenPresets, addCustomCategory, updateCustomCategory, convertPresetToCustom, removeCustomCategory, hidePresetCategory, restorePresetCategory } = useCustomCategories(userId)
   const { wallets, addWallet, removeWallet } = useWallets(userId)
   const [selectedWalletId, setSelectedWalletId] = useState<'all' | string>('all')
+  const [showWalletPopover, setShowWalletPopover] = useState(false)
   const [showWalletManager, setShowWalletManager] = useState(false)
   const [showTransfer, setShowTransfer] = useState(false)
   const [editingTransfer, setEditingTransfer] = useState<Transaction | null>(null)
@@ -99,6 +101,12 @@ export default function DashboardClient({ userId }: Props) {
   const activeWalletId: 'all' | string = selectedWalletId === 'all' || wallets.some(w => w.id === selectedWalletId)
     ? selectedWalletId
     : 'all'
+
+  const activeWalletName = useMemo(() => {
+    if (activeWalletId === 'all') return 'ทุกกระเป๋า'
+    const wallet = wallets.find(w => w.id === activeWalletId)
+    return wallet ? `${wallet.icon} ${wallet.name}` : 'ทุกกระเป๋า'
+  }, [activeWalletId, wallets])
 
   const walletTransactions = useMemo(
     () => transactions.filter(tx => txMatchesWallet(tx, activeWalletId, wallets)),
@@ -298,6 +306,39 @@ export default function DashboardClient({ userId }: Props) {
     setEditingTx(null)
   }
 
+  async function handleRenameCategory(
+    oldCat: { name: string; icon: string; isPreset: boolean },
+    updated: { name: string; icon: string },
+    type: TransactionType,
+  ) {
+    // หมวดมาตรฐานเก็บใน tx เป็นชื่อเปล่า ส่วนหมวดผู้ใช้เก็บเป็น "ไอคอน ชื่อ"
+    const oldFull = oldCat.isPreset ? oldCat.name : `${oldCat.icon} ${oldCat.name}`
+    const newFull = `${updated.icon} ${updated.name}`
+    if (oldFull === newFull) return
+
+    if (oldCat.isPreset) {
+      await convertPresetToCustom(oldCat.name, type, { name: updated.name, icon: updated.icon, type })
+    } else {
+      await updateCustomCategory(oldCat.name, type, { name: updated.name, icon: updated.icon, type })
+    }
+
+    // ย้ายรายการเดิมทั้งหมด (รวมที่อยู่ในถังขยะ) ไปใช้ชื่อหมวดใหม่ เพื่อให้สถิติไม่แตกเป็น 2 หมวด
+    const q = query(
+      collection(db, 'transactions'),
+      where('user_id', '==', userId),
+      where('category', '==', oldFull)
+    )
+    const snap = await getDocs(q)
+    for (let i = 0; i < snap.docs.length; i += 500) {
+      const batch = writeBatch(db)
+      for (const d of snap.docs.slice(i, i + 500)) {
+        batch.update(doc(db, 'transactions', d.id), { category: newFull })
+      }
+      await batch.commit()
+    }
+    setTransactions(prev => prev.map(t => (t.category === oldFull ? { ...t, category: newFull } : t)))
+  }
+
   async function handleDelete(id: string) {
     const tx = transactions.find(t => t.id === id)
     await deleteDoc(doc(db, 'transactions', id))
@@ -447,12 +488,18 @@ export default function DashboardClient({ userId }: Props) {
       {/* Premium Welcome Header (Hello, Sarah 👋 Style) */}
       <div className="flex items-center justify-between">
         <div className="space-y-1">
-          <h1 className="text-2xl font-extrabold text-slate-800 tracking-tight flex items-center gap-1.5">
-            Hello, {user?.displayName ? user.displayName.split(' ')[0] : 'Sarah'} 👋
+          <h1 className="text-2xl font-extrabold text-slate-800 tracking-tight">
+            สวัสดี, {user?.displayName ? user.displayName.split(' ')[0] : 'ผู้ใช้งาน'}
           </h1>
-          <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">
-            Good Morning · สรุปบัญชีของคุณวันนี้
+          <p className="text-xs text-slate-400 font-semibold">
+            สรุปภาพรวมบัญชีส่วนตัวของคุณวันนี้
           </p>
+          <div className="pt-1.5">
+            <div className="text-[10px] sm:text-xs font-bold text-slate-400 bg-slate-50 border border-slate-200/40 rounded-xl px-2.5 py-1 inline-flex items-center gap-1.5 w-fit">
+              <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
+              <span>กระเป๋าปัจจุบัน: <span className="text-slate-700 font-extrabold">{activeWalletName}</span></span>
+            </div>
+          </div>
         </div>
         <div className="flex items-center gap-3">
           
@@ -523,50 +570,7 @@ export default function DashboardClient({ userId }: Props) {
         </div>
       </div>
 
-      <div className="flex gap-2 overflow-x-auto pb-1">
-        <button
-          type="button"
-          onClick={() => setSelectedWalletId('all')}
-          className={`flex-shrink-0 px-3 py-2 rounded-xl border text-xs font-extrabold transition-all cursor-pointer ${
-            activeWalletId === 'all'
-              ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
-              : 'bg-white/80 text-slate-500 border-slate-200 hover:bg-slate-50'
-          }`}
-        >
-          ทุกเป๋า ฿{fmtMoney(allWalletBalance)}
-        </button>
-        {wallets.map(wallet => (
-          <button
-            key={wallet.id}
-            type="button"
-            onClick={() => setSelectedWalletId(wallet.id)}
-            className={`flex-shrink-0 px-3 py-2 rounded-xl border text-xs font-extrabold transition-all cursor-pointer ${
-              activeWalletId === wallet.id
-                ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
-                : 'bg-white/80 text-slate-500 border-slate-200 hover:bg-slate-50'
-            }`}
-          >
-            {wallet.icon} {wallet.name} ฿{fmtMoney(walletBalances[wallet.id] ?? 0)}
-          </button>
-        ))}
-        {wallets.length > 1 && (
-          <button
-            type="button"
-            onClick={() => setShowTransfer(true)}
-            className="flex-shrink-0 px-3 py-2 rounded-xl border text-xs font-extrabold bg-white/80 text-slate-500 border-slate-200 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200 transition-all cursor-pointer"
-          >
-            🔁 โอน
-          </button>
-        )}
-        <button
-          type="button"
-          onClick={() => setShowWalletManager(true)}
-          className="flex-shrink-0 w-9 h-9 rounded-xl border bg-white/80 text-slate-500 border-slate-200 hover:bg-slate-50 hover:text-slate-700 transition-all cursor-pointer"
-          aria-label="จัดการเป๋าตัง"
-        >
-          ⚙️
-        </button>
-      </div>
+      {/* Wallet selector removed from top. Moved to bottom action bar. */}
 
       {/* Glassmorphic Summary Balance Card */}
       <SummaryCards
@@ -588,7 +592,7 @@ export default function DashboardClient({ userId }: Props) {
       {/* Month Selector & Quick Actions */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between bg-white border border-slate-200/45 p-3 rounded-[24px] shadow-premium min-w-0">
         <div className="flex items-center justify-center sm:justify-start gap-2 min-w-0">
-          <span className="hidden sm:inline text-xs font-bold text-slate-400 uppercase tracking-wider pl-1.5 shrink-0">เดือน:</span>
+          <span className="hidden sm:inline text-xs font-bold text-slate-400 pl-1.5 shrink-0">เดือน:</span>
           <MonthPicker value={selectedMonth} onChange={handleMonthChange} />
         </div>
         <div className="flex items-center gap-2 shrink-0">
@@ -599,7 +603,7 @@ export default function DashboardClient({ userId }: Props) {
             title="ถังขยะ — กู้คืนรายการที่ลบ"
             aria-label="ถังขยะ"
           >
-            🗑️
+            <Trash2 className="w-4 h-4" />
             {trashItems.length > 0 && (
               <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-rose-500 text-white text-[9px] font-bold flex items-center justify-center">
                 {trashItems.length}
@@ -612,7 +616,7 @@ export default function DashboardClient({ userId }: Props) {
             className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-bold text-slate-600 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl transition-all shadow-sm cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
             title="ดาวน์โหลดข้อมูล CSV"
           >
-            📥 <span className="sm:hidden">CSV</span><span className="hidden sm:inline">ส่งออก CSV</span>
+            <Download className="w-3.5 h-3.5" /> <span className="sm:hidden">CSV</span><span className="hidden sm:inline">ส่งออก CSV</span>
           </button>
           <button
             onClick={() => setShowDeleteMonthConfirm(true)}
@@ -620,7 +624,7 @@ export default function DashboardClient({ userId }: Props) {
             className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-xl transition-all shadow-sm cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
             title="ลบประวัติทั้งหมดของเดือนนี้"
           >
-            🗑️ <span className="sm:hidden">ลบ</span><span className="hidden sm:inline">ลบเดือนนี้</span>
+            <Trash2 className="w-3.5 h-3.5" /> <span className="sm:hidden">ลบ</span><span className="hidden sm:inline">ลบเดือนนี้</span>
           </button>
         </div>
       </div>
@@ -635,14 +639,14 @@ export default function DashboardClient({ userId }: Props) {
         ) : activeTab === 'overview' ? (
           <div className="space-y-3">
             <div className="flex items-center justify-between pl-1">
-              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Monthly Overview (กราฟวิเคราะห์)</h3>
+              <h3 className="text-xs font-bold text-slate-400">ภาพรวมรายเดือน (กราฟวิเคราะห์)</h3>
             </div>
             <MonthlyChart transactions={walletTransactions} />
           </div>
         ) : (
           <div className="space-y-3">
             <div className="flex items-center justify-between pl-1">
-              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Recent Activity (ประวัติรายการล่าสุด)</h3>
+              <h3 className="text-xs font-bold text-slate-400">ประวัติรายการล่าสุด</h3>
             </div>
             <TransactionList
               transactions={walletTransactions}
@@ -656,46 +660,124 @@ export default function DashboardClient({ userId }: Props) {
       </div>
 
       {/* Floating Bottom Navigation Bar */}
-      <div className="fixed bottom-5 left-1/2 -translate-x-1/2 w-[90%] max-w-sm bg-white/80 backdrop-blur-xl border border-slate-200/60 rounded-full px-4 py-2 shadow-premium-lg flex justify-between items-center z-40 transition-all hover:bg-white">
-        {/* Dashboard Tab */}
-        <button
-          onClick={() => setActiveTab('overview')}
-          className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-2xl transition-all cursor-pointer ${
-            activeTab === 'overview' ? 'text-indigo-600 font-extrabold scale-105' : 'text-slate-400 hover:text-slate-600 font-semibold'
-          }`}
-        >
-          <span className="text-lg">📊</span>
-          <span className="text-[9px] uppercase tracking-wider">ภาพรวม</span>
-        </button>
+      <div className="fixed bottom-5 left-1/2 -translate-x-1/2 w-[90%] max-w-sm z-40">
+        {/* Wallet Selector Popover Panel */}
+        {showWalletPopover && (
+          <div className="absolute bottom-16 left-0 right-0 w-full bg-white/95 backdrop-blur-xl border border-slate-200/55 rounded-3xl shadow-premium-lg p-4 z-50 animate-scale-up space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-extrabold text-slate-800">เลือกกระเป๋าตัง</span>
+              <div className="flex items-center gap-2">
+                {wallets.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => { setShowTransfer(true); setShowWalletPopover(false); }}
+                    className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-100/50 cursor-pointer"
+                  >
+                    <ArrowLeftRight className="w-3 h-3" /> โอน
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => { setShowWalletManager(true); setShowWalletPopover(false); }}
+                  className="flex items-center gap-1 text-[10px] font-bold text-slate-500 hover:text-slate-700 bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-200/50 cursor-pointer"
+                >
+                  <Settings className="w-3 h-3" /> ตั้งค่า
+                </button>
+              </div>
+            </div>
+            <div className="border-t border-slate-100 my-1" />
+            <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1">
+              <button
+                type="button"
+                onClick={() => { setSelectedWalletId('all'); setShowWalletPopover(false); }}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  activeWalletId === 'all'
+                    ? 'bg-indigo-600 text-white shadow-sm'
+                    : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                <span>ทุกกระเป๋า</span>
+                <span className="tabular-nums">฿{fmtMoney(allWalletBalance)}</span>
+              </button>
+              {wallets.map(wallet => {
+                const isSelected = activeWalletId === wallet.id
+                return (
+                  <button
+                    key={wallet.id}
+                    type="button"
+                    onClick={() => { setSelectedWalletId(wallet.id); setShowWalletPopover(false); }}
+                    className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      isSelected
+                        ? 'bg-indigo-600 text-white shadow-sm'
+                        : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    <span className="flex items-center gap-1.5">
+                      <span>{wallet.icon}</span>
+                      <span>{wallet.name}</span>
+                    </span>
+                    <span className="tabular-nums">฿{fmtMoney(walletBalances[wallet.id] ?? 0)}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
 
-        {/* Center Floating Add Button */}
-        <button
-          onClick={openBlankForm}
-          className="w-12 h-12 rounded-full bg-emerald-500 hover:bg-emerald-600 text-white flex items-center justify-center text-xl shadow-md shadow-emerald-100/50 hover:shadow-lg hover:shadow-emerald-200/50 active:scale-95 transition-all cursor-pointer transform -translate-y-4 animate-bounce-subtle"
-          title="บันทึกรายการใหม่"
-        >
-          ➕
-        </button>
+        {/* Tab Bar Content */}
+        <div className="bg-white/80 backdrop-blur-xl border border-slate-200/60 rounded-full px-4 py-2 shadow-premium-lg flex justify-between items-center w-full transition-all hover:bg-white">
+          {/* Dashboard Tab */}
+          <button
+            onClick={() => { setActiveTab('overview'); setShowWalletPopover(false); }}
+            className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-2xl transition-all cursor-pointer ${
+              activeTab === 'overview' && !showWalletPopover ? 'text-indigo-600 font-extrabold scale-105' : 'text-slate-400 hover:text-slate-600 font-semibold'
+            }`}
+          >
+            <ChartPie className="w-5 h-5" />
+            <span className="text-[9px]">ภาพรวม</span>
+          </button>
 
-        {/* Transactions Tab */}
-        <button
-          onClick={() => setActiveTab('list')}
-          className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-2xl transition-all cursor-pointer ${
-            activeTab === 'list' ? 'text-indigo-600 font-extrabold scale-105' : 'text-slate-400 hover:text-slate-600 font-semibold'
-          }`}
-        >
-          <span className="text-lg">📋</span>
-          <span className="text-[9px] uppercase tracking-wider">รายการ</span>
-        </button>
+          {/* Wallets Tab */}
+          <button
+            onClick={() => setShowWalletPopover(prev => !prev)}
+            className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-2xl transition-all cursor-pointer ${
+              showWalletPopover ? 'text-indigo-600 font-extrabold scale-105' : 'text-slate-400 hover:text-slate-600 font-semibold'
+            }`}
+          >
+            <Wallet className="w-5 h-5" />
+            <span className="text-[9px]">กระเป๋าตัง</span>
+          </button>
 
-        {/* Debts Tab */}
-        <Link
-          href="/debts"
-          className="flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-2xl transition-all text-slate-400 hover:text-rose-500 font-semibold"
-        >
-          <span className="text-lg">💸</span>
-          <span className="text-[9px] uppercase tracking-wider">หนี้สิน</span>
-        </Link>
+          {/* Center Floating Add Button */}
+          <button
+            onClick={() => { openBlankForm(); setShowWalletPopover(false); }}
+            className="w-12 h-12 rounded-full bg-emerald-500 hover:bg-emerald-600 text-white flex items-center justify-center shadow-md shadow-emerald-100/50 hover:shadow-lg hover:shadow-emerald-200/50 active:scale-95 transition-all cursor-pointer transform -translate-y-4 shrink-0"
+            title="บันทึกรายการใหม่"
+          >
+            <Plus className="w-6 h-6" strokeWidth={2.5} />
+          </button>
+
+          {/* Transactions Tab */}
+          <button
+            onClick={() => { setActiveTab('list'); setShowWalletPopover(false); }}
+            className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-2xl transition-all cursor-pointer ${
+              activeTab === 'list' && !showWalletPopover ? 'text-indigo-600 font-extrabold scale-105' : 'text-slate-400 hover:text-slate-600 font-semibold'
+            }`}
+          >
+            <List className="w-5 h-5" />
+            <span className="text-[9px]">รายการ</span>
+          </button>
+
+          {/* Debts Tab */}
+          <Link
+            href="/debts"
+            onClick={() => setShowWalletPopover(false)}
+            className="flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-2xl transition-all text-slate-400 hover:text-rose-500 font-semibold"
+          >
+            <HandCoins className="w-5 h-5" />
+            <span className="text-[9px]">หนี้สิน</span>
+          </Link>
+        </div>
       </div>
 
       {showForm && (
@@ -706,6 +788,7 @@ export default function DashboardClient({ userId }: Props) {
           customCategories={customCategories}
           onAddCustomCategory={addCustomCategory}
           onRemoveCustomCategory={removeCustomCategory}
+          onRenameCategory={handleRenameCategory}
           hiddenPresets={hiddenPresets}
           onHidePresetCategory={hidePresetCategory}
           onRestorePresetCategory={restorePresetCategory}
@@ -722,6 +805,7 @@ export default function DashboardClient({ userId }: Props) {
           customCategories={customCategories}
           onAddCustomCategory={addCustomCategory}
           onRemoveCustomCategory={removeCustomCategory}
+          onRenameCategory={handleRenameCategory}
           hiddenPresets={hiddenPresets}
           onHidePresetCategory={hidePresetCategory}
           onRestorePresetCategory={restorePresetCategory}

@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import type { Wallet } from '@/types'
 import ConfirmDialog from './ConfirmDialog'
+import { Settings, X, Trash2, Loader2, Plus } from 'lucide-react'
 
 interface Props {
   wallets: Wallet[]
@@ -46,13 +47,16 @@ export default function WalletManager({ wallets, balances, onAddWallet, onRemove
     <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-4">
       <div className="bg-white/95 backdrop-blur-xl rounded-[28px] w-full max-w-md shadow-premium-lg border border-slate-100 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between px-6 py-5 border-b border-slate-100 sticky top-0 bg-white/90 backdrop-blur z-10">
-          <h2 className="font-extrabold text-slate-800 tracking-tight text-base">⚙️ จัดการเป๋าตัง</h2>
+          <h2 className="font-extrabold text-slate-800 tracking-tight text-base flex items-center gap-1.5">
+            <Settings className="w-4.5 h-4.5 text-slate-500" />
+            จัดการเป๋าตัง
+          </h2>
           <button
             type="button"
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-slate-100 text-slate-400 hover:text-slate-700 hover:bg-slate-200 transition-all flex items-center justify-center text-sm leading-none cursor-pointer"
+            className="w-8 h-8 rounded-full bg-slate-100 text-slate-400 hover:text-slate-700 hover:bg-slate-200 transition-all flex items-center justify-center cursor-pointer"
           >
-            ✕
+            <X className="w-4 h-4" />
           </button>
         </div>
 
@@ -78,7 +82,7 @@ export default function WalletManager({ wallets, balances, onAddWallet, onRemove
                     onClick={() => setWalletToDelete(wallet)}
                     className="w-8 h-8 rounded-xl text-slate-300 hover:text-rose-600 hover:bg-rose-50/70 transition-all flex items-center justify-center cursor-pointer"
                   >
-                    🗑️
+                    <Trash2 className="w-4 h-4" />
                   </button>
                 )}
               </div>
@@ -86,7 +90,7 @@ export default function WalletManager({ wallets, balances, onAddWallet, onRemove
           </div>
 
           <form onSubmit={handleAdd} className="p-4 rounded-2xl border border-indigo-100/70 bg-indigo-50/40 space-y-3.5">
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">เพิ่มเป๋าใหม่</p>
+            <p className="text-[10px] font-bold text-slate-400">เพิ่มเป๋าใหม่</p>
             <div className="flex gap-2.5 items-center">
               <button
                 type="button"
@@ -126,7 +130,15 @@ export default function WalletManager({ wallets, balances, onAddWallet, onRemove
               disabled={loading || !name.trim()}
               className="w-full py-3 bg-indigo-600 text-white rounded-2xl font-bold text-xs hover:bg-indigo-700 disabled:opacity-50 transition-all shadow-sm cursor-pointer"
             >
-              {loading ? '⏳ กำลังเพิ่ม...' : '✓ เพิ่มเป๋า'}
+              {loading ? (
+                <span className="flex items-center justify-center gap-1.5">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" /> กำลังเพิ่ม...
+                </span>
+              ) : (
+                <span className="flex items-center justify-center gap-1.5">
+                  <Plus className="w-3.5 h-3.5" /> เพิ่มเป๋า
+                </span>
+              )}
             </button>
           </form>
         </div>

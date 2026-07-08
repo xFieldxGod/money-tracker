@@ -7,6 +7,7 @@ import {
   getDay, addMonths, subMonths, isSameDay, isToday,
 } from 'date-fns'
 import { th } from 'date-fns/locale'
+import { ChevronLeft, ChevronRight, Calendar } from 'lucide-react'
 
 interface Props {
   value: string
@@ -75,9 +76,9 @@ export default function DatePicker({ value, onChange }: Props) {
         <button
           type="button"
           onClick={() => setViewMonth(subMonths(viewMonth, 1))}
-          className="w-9 h-9 rounded-2xl bg-slate-50 hover:bg-slate-100 flex items-center justify-center text-slate-600 font-bold transition-all cursor-pointer text-lg"
+          className="w-9 h-9 rounded-2xl bg-slate-50 hover:bg-slate-100 flex items-center justify-center text-slate-600 font-bold transition-all cursor-pointer"
         >
-          ‹
+          <ChevronLeft className="w-4 h-4" />
         </button>
         <span className="font-extrabold text-slate-800 text-sm">
           {format(viewMonth, 'MMMM yyyy', { locale: th })}
@@ -85,9 +86,9 @@ export default function DatePicker({ value, onChange }: Props) {
         <button
           type="button"
           onClick={() => setViewMonth(addMonths(viewMonth, 1))}
-          className="w-9 h-9 rounded-2xl bg-slate-50 hover:bg-slate-100 flex items-center justify-center text-slate-600 font-bold transition-all cursor-pointer text-lg"
+          className="w-9 h-9 rounded-2xl bg-slate-50 hover:bg-slate-100 flex items-center justify-center text-slate-600 font-bold transition-all cursor-pointer"
         >
-          ›
+          <ChevronRight className="w-4 h-4" />
         </button>
       </div>
 
@@ -159,7 +160,7 @@ export default function DatePicker({ value, onChange }: Props) {
         }`}
       >
         <div className="flex items-center gap-2.5">
-          <span className="text-base">📅</span>
+          <Calendar className="w-4 h-4 text-slate-400" />
           <span className={`text-sm font-bold ${value ? 'text-slate-800' : 'text-slate-400'}`}>
             {formatDisplay(value)}
           </span>
