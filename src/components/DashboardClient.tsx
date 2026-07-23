@@ -22,9 +22,11 @@ import TransferForm from './TransferForm'
 import WalletManager from './WalletManager'
 import QuickAddBar from './QuickAddBar'
 import { useWallets } from '@/lib/useWallets'
-import { txMatchesWallet, resolveWalletId, walletName } from '@/lib/wallets'
+import { useProfile } from '@/lib/useProfile'
+import ProfileEditModal from './ProfileEditModal'
+import { txMatchesWallet, signedAmount, resolveWalletId, walletName } from '@/lib/wallets'
 import { groupTrashByMonth, isActiveTransaction, isTrashExpired, type TrashMonthGroup } from '@/lib/trash'
-import { ArrowLeftRight, Settings, Trash2, Download, ChartPie, Plus, List, HandCoins, Wallet } from 'lucide-react'
+import { ArrowLeftRight, Settings, Trash2, Download, ChartPie, Plus, List, HandCoins, Wallet, SquarePen } from 'lucide-react'
 import TrashBin from './TrashBin'
 
 const MonthlyChart = dynamic(() => import('./MonthlyChart'), {
@@ -80,7 +82,7 @@ export default function DashboardClient({ userId }: Props) {
   const [trashItems, setTrashItems] = useState<TrashMonthGroup[]>([])
   const [restoringMonth, setRestoringMonth] = useState<string | null>(null)
   const { customCategories, hiddenPresets, addCustomCategory, updateCustomCategory, convertPresetToCustom, removeCustomCategory, hidePresetCategory, restorePresetCategory } = useCustomCategories(userId)
-  const { wallets, addWallet, removeWallet } = useWallets(userId)
+  const { wallets, addWallet, updateWallet, removeWallet } = useWallets(userId)
   const [selectedWalletId, setSelectedWalletId] = useState<'all' | string>('all')
   const [showWalletPopover, setShowWalletPopover] = useState(false)
   const [showWalletManager, setShowWalletManager] = useState(false)
@@ -90,8 +92,13 @@ export default function DashboardClient({ userId }: Props) {
   const [selectedMonth, setSelectedMonth] = useState(new Date())
   const [activeTab, setActiveTab] = useState<'overview' | 'list'>('overview')
   const [failedAvatarUrl, setFailedAvatarUrl] = useState<string | null>(null)
-  const userInitial = (user?.displayName || user?.email || 'S').trim().charAt(0).toUpperCase()
-  const showAvatar = Boolean(user?.photoURL && failedAvatarUrl !== user.photoURL)
+  const [showProfileEdit, setShowProfileEdit] = useState(false)
+  const { profile, saveProfile } = useProfile(userId)
+  // ชื่อ/รูปที่ตั้งเองใน Firestore มาก่อน ถ้าไม่มีค่อยใช้จากบัญชี (Google)
+  const displayName = profile.name || user?.displayName || null
+  const avatarUrl = profile.photo || user?.photoURL || null
+  const userInitial = (displayName || user?.email || 'S').trim().charAt(0).toUpperCase()
+  const showAvatar = Boolean(avatarUrl && failedAvatarUrl !== avatarUrl)
 
   async function handleSignOut() {
     await signOut(auth)
@@ -136,6 +143,13 @@ export default function DashboardClient({ userId }: Props) {
   const displayBalance = activeWalletId === 'all'
     ? allWalletBalance
     : walletBalances[activeWalletId] ?? 0
+  // ยอดโอนสุทธิของเดือนในมุมมองเป๋าที่เลือก (มุมมองทุกเป๋า = 0 เสมอ)
+  const transferNet = useMemo(
+    () => walletTransactions
+      .filter(t => t.type === 'transfer')
+      .reduce((s, t) => s + signedAmount(t, activeWalletId, wallets), 0),
+    [walletTransactions, activeWalletId, wallets]
+  )
 
   // รายชื่อหมวด (preset + custom) ส่งให้ AI เลือก
   const expenseCategoryNames = useMemo(
@@ -245,6 +259,7 @@ export default function DashboardClient({ userId }: Props) {
       setRawDeltas(deltas)
     }
     void loadWalletBalances()
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadTrashAndPurge()
   }, [userId, loadTrashAndPurge])
 
@@ -489,7 +504,7 @@ export default function DashboardClient({ userId }: Props) {
       <div className="flex items-center justify-between">
         <div className="space-y-1">
           <h1 className="text-2xl font-extrabold text-slate-800 tracking-tight">
-            สวัสดี, {user?.displayName ? user.displayName.split(' ')[0] : 'ผู้ใช้งาน'}
+            สวัสดี, {displayName ? displayName.split(' ')[0] : 'ผู้ใช้งาน'}
           </h1>
           <p className="text-xs text-slate-400 font-semibold">
             สรุปภาพรวมบัญชีส่วนตัวของคุณวันนี้
@@ -498,6 +513,10 @@ export default function DashboardClient({ userId }: Props) {
             <div className="text-[10px] sm:text-xs font-bold text-slate-400 bg-slate-50 border border-slate-200/40 rounded-xl px-2.5 py-1 inline-flex items-center gap-1.5 w-fit">
               <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
               <span>กระเป๋าปัจจุบัน: <span className="text-slate-700 font-extrabold">{activeWalletName}</span></span>
+              <span className="text-slate-300">|</span>
+              <span className={`tabular-nums font-extrabold ${displayBalance >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                ฿{fmtMoney(displayBalance)}
+              </span>
             </div>
           </div>
         </div>
@@ -507,10 +526,10 @@ export default function DashboardClient({ userId }: Props) {
           <div className="relative">
             {showAvatar ? (
               <img
-                src={user?.photoURL ?? ''}
+                src={avatarUrl ?? ''}
                 alt="avatar"
                 referrerPolicy="no-referrer"
-                onError={() => setFailedAvatarUrl(user?.photoURL ?? null)}
+                onError={() => setFailedAvatarUrl(avatarUrl)}
                 onClick={() => setShowProfileMenu(prev => !prev)}
                 className="w-10 h-10 rounded-2xl ring-2 ring-indigo-50 shadow-sm object-cover cursor-pointer hover:ring-indigo-100 transition-all active:scale-95"
               />
@@ -531,10 +550,10 @@ export default function DashboardClient({ userId }: Props) {
                 <div className="flex items-center gap-3 text-left">
                   {showAvatar ? (
                     <img
-                      src={user?.photoURL ?? ''}
+                      src={avatarUrl ?? ''}
                       alt="avatar"
                       referrerPolicy="no-referrer"
-                      onError={() => setFailedAvatarUrl(user?.photoURL ?? null)}
+                      onError={() => setFailedAvatarUrl(avatarUrl)}
                       className="w-10 h-10 rounded-xl object-cover ring-1 ring-slate-100"
                     />
                   ) : (
@@ -544,7 +563,7 @@ export default function DashboardClient({ userId }: Props) {
                   )}
                   <div className="min-w-0">
                     <p className="text-xs font-extrabold text-slate-800 truncate leading-tight">
-                      {user?.displayName || 'ผู้ใช้งาน'}
+                      {displayName || 'ผู้ใช้งาน'}
                     </p>
                     <p className="text-[9px] text-slate-400 font-bold truncate leading-tight mt-1">
                       {user?.email || 'ไม่มีอีเมล'}
@@ -553,7 +572,18 @@ export default function DashboardClient({ userId }: Props) {
                 </div>
                 
                 <div className="border-t border-slate-100" />
-                
+
+                <button
+                  onClick={() => {
+                    setShowProfileMenu(false);
+                    setShowProfileEdit(true);
+                  }}
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-left text-xs font-bold text-slate-600 hover:text-indigo-600 hover:bg-indigo-50/50 transition-all cursor-pointer"
+                >
+                  <SquarePen className="w-3.5 h-3.5" />
+                  <span>แก้ไขโปรไฟล์</span>
+                </button>
+
                 <button
                   onClick={() => {
                     setShowProfileMenu(false);
@@ -576,6 +606,7 @@ export default function DashboardClient({ userId }: Props) {
       <SummaryCards
         income={totalIncome}
         expense={totalExpense}
+        transferNet={transferNet}
         transactions={walletTransactions}
         userId={userId}
         selectedWalletId={activeWalletId}
@@ -836,6 +867,7 @@ export default function DashboardClient({ userId }: Props) {
           wallets={wallets}
           balances={walletBalances}
           onAddWallet={addWallet}
+          onUpdateWallet={updateWallet}
           onRemoveWallet={async id => {
             await removeWallet(id)
             if (selectedWalletId === id) setSelectedWalletId('all')
@@ -872,9 +904,19 @@ export default function DashboardClient({ userId }: Props) {
         />
       )}
 
+      {showProfileEdit && (
+        <ProfileEditModal
+          profile={profile}
+          fallbackName={user?.displayName || ''}
+          fallbackPhoto={user?.photoURL ?? null}
+          onSave={saveProfile}
+          onClose={() => setShowProfileEdit(false)}
+        />
+      )}
+
       {showSignOutConfirm && (
         <ConfirmDialog
-          message={user?.displayName || user?.email || ''}
+          message={displayName || user?.email || ''}
           onConfirm={handleSignOut}
           onCancel={() => setShowSignOutConfirm(false)}
           confirmLabel="ออกจากระบบ"

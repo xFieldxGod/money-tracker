@@ -3,6 +3,7 @@
 import { useAuth } from '@/contexts/AuthContext'
 import { useRouter } from 'next/navigation'
 import { useEffect } from 'react'
+import VerifyEmailBanner from '@/components/VerifyEmailBanner'
 
 function DashboardSkeleton() {
   return (
@@ -51,7 +52,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="relative min-h-screen bg-slate-50/60">
-      <main className="relative max-w-4xl mx-auto px-4 py-6">{children}</main>
+      <main className="relative max-w-4xl mx-auto px-4 py-6">
+        <VerifyEmailBanner />
+        {children}
+      </main>
     </div>
   )
 }

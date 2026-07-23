@@ -30,6 +30,12 @@ export function useWallets(userId: string) {
     await setDoc(doc(db, 'users', userId), { wallets: next }, { merge: true })
   }
 
+  async function updateWallet(id: string, name: string, icon: string) {
+    const next = wallets.map(w => (w.id === id ? { ...w, name, icon } : w))
+    setWallets(next)
+    await setDoc(doc(db, 'users', userId), { wallets: next }, { merge: true })
+  }
+
   async function removeWallet(id: string) {
     if (wallets.length <= 1) return
     const next = wallets.filter(w => w.id !== id)
@@ -37,5 +43,5 @@ export function useWallets(userId: string) {
     await setDoc(doc(db, 'users', userId), { wallets: next }, { merge: true })
   }
 
-  return { wallets, walletsLoaded, addWallet, removeWallet }
+  return { wallets, walletsLoaded, addWallet, updateWallet, removeWallet }
 }

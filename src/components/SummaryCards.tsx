@@ -15,6 +15,8 @@ type Range = '1W' | '1M' | '3M' | 'ALL' | 'MONTH'
 interface Props {
   income: number
   expense: number
+  /** ยอดโอนเข้า-ออกสุทธิของเป๋าที่เลือก (มุมมองทุกเป๋า = 0) */
+  transferNet?: number
   transactions: Transaction[]
   userId: string
   selectedWalletId: 'all' | string
@@ -160,8 +162,8 @@ function getRangeBounds(range: Range, month: Date): { from: string; to?: string 
   return { from: format(now, 'yyyy-MM-dd') }
 }
 
-export default function SummaryCards({ income, expense, transactions, userId, selectedWalletId, wallets }: Props) {
-  const balance = income - expense
+export default function SummaryCards({ income, expense, transferNet = 0, transactions, userId, selectedWalletId, wallets }: Props) {
+  const balance = income - expense + transferNet
   const isPositive = balance >= 0
   const [range, setRange] = useState<Range>('ALL')
   const [chartMonth, setChartMonth] = useState(() => new Date())

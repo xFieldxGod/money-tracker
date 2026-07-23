@@ -134,10 +134,20 @@ export default function TransactionList({ transactions, onDelete, onEdit, wallet
                         <p className="text-xs text-slate-400 truncate mt-0.5 font-medium">
                           {fromWallet.icon} {fromWallet.name} → {toWallet.icon} {toWallet.name}
                         </p>
-                      ) : t.note ? (
-                        <p className="text-xs text-slate-400 truncate mt-0.5 font-medium">{t.note}</p>
                       ) : (
-                        <p className="text-[10px] text-slate-300 truncate mt-0.5 font-medium">ไม่มีบันทึกโน้ต</p>
+                        <p className="text-xs text-slate-400 mt-0.5 font-medium flex items-center gap-1.5 min-w-0">
+                          {/* บอกว่ารายการนี้ผ่านเป๋าไหน — แสดงเฉพาะมุมมองทุกเป๋าที่มีหลายเป๋า */}
+                          {selectedWalletId === 'all' && wallets.length > 1 && (
+                            <span className="inline-flex items-center gap-1 flex-shrink-0 text-[10px] font-bold text-slate-500 bg-slate-100/80 border border-slate-200/60 rounded-lg px-1.5 py-0.5">
+                              {fromWallet.icon} {fromWallet.name}
+                            </span>
+                          )}
+                          {t.note ? (
+                            <span className="truncate min-w-0">{t.note}</span>
+                          ) : (
+                            <span className="text-[10px] text-slate-300 truncate min-w-0">ไม่มีบันทึกโน้ต</span>
+                          )}
+                        </p>
                       )}
                     </div>
 
