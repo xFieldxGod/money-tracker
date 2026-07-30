@@ -222,6 +222,42 @@ export function pctChange(current: number, previous: number): number | null {
   return round1(((current - previous) / previous) * 100)
 }
 
+export interface PeriodComparison {
+  current: { label: string; stats: IncomeExpenseStats }
+  previous: { label: string; stats: IncomeExpenseStats }
+  incomeChange: number | null
+  expenseChange: number | null
+  netChange: number | null
+  /** ส่วนต่างของ "รายจ่ายคิดเป็นกี่ % ของรายรับ" เป็นจุดเปอร์เซ็นต์ (percentage point) */
+  expenseRatioDiff: number | null
+}
+
+/**
+ * เทียบสองช่วงล่าสุดที่มีข้อมูล (ใช้ได้ทั้งรายเดือนและรายปี)
+ * ข้ามช่วงที่ไม่มีรายการเลย เพื่อไม่ให้เดือนว่างมาคั่นแล้วเทียบกับ 0
+ */
+export function comparePeriods(
+  periods: { label: string; stats: IncomeExpenseStats }[],
+): PeriodComparison | null {
+  const active = periods.filter(p => p.stats.count > 0)
+  if (active.length < 2) return null
+
+  const current = active[active.length - 1]
+  const previous = active[active.length - 2]
+
+  return {
+    current,
+    previous,
+    incomeChange: pctChange(current.stats.income, previous.stats.income),
+    expenseChange: pctChange(current.stats.expense, previous.stats.expense),
+    netChange: pctChange(current.stats.net, previous.stats.net),
+    expenseRatioDiff:
+      current.stats.income > 0 && previous.stats.income > 0
+        ? round1(current.stats.expenseToIncomePct - previous.stats.expenseToIncomePct)
+        : null,
+  }
+}
+
 export interface MonthPopularity {
   month: number
   label: string

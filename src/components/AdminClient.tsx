@@ -15,25 +15,33 @@ import { StatCard, StatsRow, IncomeExpenseBar, fmtMoney, fmtPct, STATUS_STYLE } 
 import { ComparisonChart, ComparisonTable, type ComparisonRow } from './analytics/ComparisonChart'
 import {
   Shield, ArrowLeft, Users, Receipt, CalendarDays, TrendingUp, TrendingDown, Minus, Download,
+  UserCheck, UserX,
 } from 'lucide-react'
 
 type View = 'month' | 'year'
 
 export default function AdminClient() {
   const [allTx, setAllTx] = useState<Transaction[]>([])
+  // uid ทุกคนที่มี document ใน users = คนที่สมัคร/เคยเปิดแอปแล้ว (แอปสร้าง doc ตอน seed เป๋าใบแรก)
+  const [registeredIds, setRegisteredIds] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [view, setView] = useState<View>('month')
   const [pickedYear, setPickedYear] = useState<number>(() => new Date().getFullYear())
   const [popularityYear, setPopularityYear] = useState<number | 'all'>('all')
 
-  // แอดมินอ่าน transactions ทั้งคอลเลกชัน — firestore.rules อนุญาตเฉพาะ role admin
+  // แอดมินอ่าน transactions + users ทั้งคอลเลกชัน — firestore.rules อนุญาตเฉพาะ role admin
+  // ต้องอ่าน users ด้วย เพื่อรู้จำนวนคนที่สมัครแล้วแต่ยังไม่เคยบันทึกรายการเลย
   useEffect(() => {
     let cancelled = false
-    getDocs(collection(db, 'transactions'))
-      .then(snap => {
+    Promise.all([
+      getDocs(collection(db, 'transactions')),
+      getDocs(collection(db, 'users')),
+    ])
+      .then(([txSnap, userSnap]) => {
         if (cancelled) return
-        setAllTx(snap.docs.map(d => ({ id: d.id, ...d.data() } as Transaction)).filter(isActiveTransaction))
+        setAllTx(txSnap.docs.map(d => ({ id: d.id, ...d.data() } as Transaction)).filter(isActiveTransaction))
+        setRegisteredIds(userSnap.docs.map(d => d.id))
         setLoading(false)
       })
       .catch(() => {
@@ -103,6 +111,28 @@ export default function AdminClient() {
   const users = useMemo(() => perUserBreakdown(scopeByUser), [scopeByUser])
   const dist = useMemo(() => statusDistribution(users), [users])
   const topCats = useMemo(() => categoryRanking(scopeTx, 'expense').slice(0, 8), [scopeTx])
+
+  /**
+   * อัตราการใช้งานจริง: สมัครแล้วกี่คน ในนั้นเคยบันทึกจริงกี่คน
+   * ฐานคือ users ทั้งหมด ไม่ใช่แค่คนที่มี transaction — จะได้เห็นคนที่สมัครแล้วหายไป
+   */
+  const engagement = useMemo(() => {
+    // เผื่อกรณีมี transaction ของ uid ที่ไม่มี doc ใน users (ข้อมูลเก่า) ให้นับรวมเป็นคนสมัครด้วย
+    const registered = new Set(registeredIds)
+    for (const uid of byUser.keys()) registered.add(uid)
+
+    const total = registered.size
+    const active = [...registered].filter(uid => (byUser.get(uid)?.length ?? 0) > 0).length
+    const inactive = total - active
+
+    return {
+      total,
+      active,
+      inactive,
+      activePct: total > 0 ? Math.round((active / total) * 1000) / 10 : 0,
+      inactivePct: total > 0 ? Math.round((inactive / total) * 1000) / 10 : 0,
+    }
+  }, [registeredIds, byUser])
 
   // ค่าเฉลี่ยต่อคน ใช้ตอบว่าผู้ใช้ทั่วไปมีพฤติกรรมยังไง
   const avgPerUser = useMemo(() => {
@@ -234,9 +264,9 @@ export default function AdminClient() {
       {/* KPI รวมระบบ */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <StatCard
-          label="ผู้ใช้ทั้งหมด"
-          value={String(byUser.size)}
-          sub={`มีข้อมูลใน${scopeLabel} ${users.length} คน`}
+          label="ผู้ใช้ที่สมัครทั้งหมด"
+          value={String(engagement.total)}
+          sub={`เคยบันทึกจริง ${engagement.active} คน (${fmtPct(engagement.activePct)})`}
           tone="indigo"
           icon={<Users className="w-3.5 h-3.5" strokeWidth={2.5} />}
         />
@@ -267,6 +297,59 @@ export default function AdminClient() {
       <div className="space-y-3">
         <h3 className="text-xs font-bold text-slate-400 pl-1">ยอดรวมทั้งระบบ — {scopeLabel}</h3>
         <StatsRow stats={scopeStats} />
+      </div>
+
+      {/* อัตราการใช้งานจริง — สมัครแล้วใช้ต่อกี่คน หายไปกี่คน */}
+      <div className="bg-white border border-slate-200/45 rounded-[24px] p-5 shadow-premium space-y-4">
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <h3 className="text-xs font-bold text-slate-800">อัตราการใช้งานจริง</h3>
+            <p className="text-[10px] font-bold text-slate-400 mt-0.5">
+              สมัครแล้วเริ่มบันทึกรายการจริงกี่คน (นับทุกช่วงเวลา)
+            </p>
+          </div>
+          <span className="text-[10px] font-bold text-slate-400">{engagement.total} คน</span>
+        </div>
+
+        {engagement.total === 0 ? (
+          <p className="text-[11px] font-bold text-slate-400 text-center py-6">ยังไม่มีผู้ใช้ในระบบ</p>
+        ) : (
+          <>
+            <div className="flex h-3 rounded-full overflow-hidden bg-slate-100">
+              <div className="bg-indigo-500" style={{ width: `${engagement.activePct}%` }} title={`ใช้งานจริง ${fmtPct(engagement.activePct)}`} />
+              <div className="bg-slate-300" style={{ width: `${engagement.inactivePct}%` }} title={`ยังไม่เริ่มใช้ ${fmtPct(engagement.inactivePct)}`} />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <div className="rounded-2xl border border-indigo-100 bg-indigo-50/60 p-3.5 space-y-1">
+                <div className="flex items-center gap-1.5 text-indigo-600">
+                  <UserCheck className="w-4 h-4" strokeWidth={2.5} />
+                  <p className="text-[10px] font-bold">เคยบันทึกรายการแล้ว</p>
+                </div>
+                <p className="text-xl font-extrabold text-slate-800 tabular-nums">{fmtPct(engagement.activePct)}</p>
+                <p className="text-[10px] font-bold text-slate-400">{engagement.active} คน</p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3.5 space-y-1">
+                <div className="flex items-center gap-1.5 text-slate-500">
+                  <UserX className="w-4 h-4" strokeWidth={2.5} />
+                  <p className="text-[10px] font-bold">สมัครแล้วยังไม่เริ่มใช้</p>
+                </div>
+                <p className="text-xl font-extrabold text-slate-800 tabular-nums">{fmtPct(engagement.inactivePct)}</p>
+                <p className="text-[10px] font-bold text-slate-400">{engagement.inactive} คน</p>
+              </div>
+            </div>
+
+            <div className="bg-slate-50 border border-slate-200/60 rounded-2xl p-3.5">
+              <p className="text-[11px] font-semibold text-slate-600 leading-relaxed">
+                มีผู้ใช้สมัครทั้งหมด {engagement.total} คน —{' '}
+                <span className="font-extrabold text-indigo-600">{engagement.active} คน</span> เริ่มบันทึกรายการจริง
+                {engagement.inactive > 0 && (
+                  <> ส่วนอีก <span className="font-extrabold text-slate-600">{engagement.inactive} คน</span> ({fmtPct(engagement.inactivePct)}) สมัครแล้วยังไม่เคยบันทึกอะไรเลย</>
+                )}
+              </p>
+            </div>
+          </>
+        )}
       </div>
 
       {/* การกระจายตัวของผู้ใช้ตามสถานะการเงิน */}

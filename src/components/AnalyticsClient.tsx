@@ -11,7 +11,7 @@ import { useAdmin } from '@/lib/useAdmin'
 import type { Transaction } from '@/types'
 import {
   computeStats, monthlyBreakdown, yearlyBreakdown, availableYears,
-  categoryRanking, pctChange, MONTH_NAMES_TH, STATUS_LABEL,
+  categoryRanking, comparePeriods, MONTH_NAMES_TH, STATUS_LABEL,
 } from '@/lib/analytics'
 import { StatsRow, StatusBadge, IncomeExpenseBar, fmtMoney, fmtPct, STATUS_STYLE } from './analytics/StatPills'
 import { ComparisonChart, ComparisonTable, type ComparisonRow } from './analytics/ComparisonChart'
@@ -87,19 +87,13 @@ export default function AnalyticsClient({ userId }: { userId: string }) {
     return { topSpend, bestSave, busiest, activeCount: active.length }
   }, [months])
 
-  // เทียบเดือนล่าสุดที่มีข้อมูล กับเดือนก่อนหน้า
-  const momChange = useMemo(() => {
-    const active = months.filter(m => m.stats.count > 0)
-    if (active.length < 2) return null
-    const latest = active[active.length - 1]
-    const prev = active[active.length - 2]
-    return {
-      latest,
-      prev,
-      income: pctChange(latest.stats.income, prev.stats.income),
-      expense: pctChange(latest.stats.expense, prev.stats.expense),
+  // เทียบสองช่วงล่าสุดที่มีข้อมูล — เดือนกับเดือน หรือปีกับปี ตามมุมมองที่เลือก
+  const comparison = useMemo(() => {
+    if (view === 'month') {
+      return comparePeriods(months.map(m => ({ label: MONTH_NAMES_TH[m.month - 1], stats: m.stats })))
     }
-  }, [months])
+    return comparePeriods(yearsData.map(y => ({ label: `พ.ศ. ${y.label}`, stats: y.stats })))
+  }, [view, months, yearsData])
 
   const topExpenseCats = useMemo(() => categoryRanking(scopeTx, 'expense').slice(0, 6), [scopeTx])
   const topIncomeCats = useMemo(() => categoryRanking(scopeTx, 'income').slice(0, 6), [scopeTx])
@@ -275,15 +269,70 @@ export default function AnalyticsClient({ userId }: { userId: string }) {
             </div>
           </div>
 
-          {momChange && (
-            <div className="border-t border-slate-100 pt-3 space-y-1.5">
-              <p className="text-[10px] font-bold text-slate-400">
-                เทียบ {MONTH_NAMES_TH[momChange.latest.month - 1]} กับ {MONTH_NAMES_TH[momChange.prev.month - 1]}
+        </div>
+      )}
+
+      {/* เทียบช่วงล่าสุดกับช่วงก่อนหน้า — ใช้ได้ทั้งรายเดือนและรายปี */}
+      {comparison && (
+        <div className="bg-white border border-slate-200/45 rounded-[24px] p-5 shadow-premium space-y-3.5">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <h3 className="text-xs font-bold text-slate-800">
+              เทียบ{view === 'month' ? 'เดือนล่าสุด' : 'ปีล่าสุด'}กับ{view === 'month' ? 'เดือน' : 'ปี'}ก่อนหน้า
+            </h3>
+            <span className="text-[10px] font-bold text-slate-400">
+              {comparison.previous.label} → {comparison.current.label}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+            <CompareCell
+              label="รายรับ"
+              current={comparison.current.stats.income}
+              previous={comparison.previous.stats.income}
+              change={comparison.incomeChange}
+              goodWhenUp
+            />
+            <CompareCell
+              label="รายจ่าย"
+              current={comparison.current.stats.expense}
+              previous={comparison.previous.stats.expense}
+              change={comparison.expenseChange}
+              goodWhenUp={false}
+            />
+            <CompareCell
+              label="คงเหลือสุทธิ"
+              current={comparison.current.stats.net}
+              previous={comparison.previous.stats.net}
+              change={comparison.netChange}
+              goodWhenUp
+            />
+          </div>
+
+          {/* สรุปเป็นประโยคว่าดีขึ้นหรือแย่ลง */}
+          {comparison.expenseRatioDiff !== null && (
+            <div
+              className={`rounded-2xl border p-3.5 ${
+                comparison.expenseRatioDiff <= 0
+                  ? 'bg-emerald-50/60 border-emerald-100'
+                  : 'bg-rose-50/60 border-rose-100'
+              }`}
+            >
+              <p className="text-[11px] font-semibold text-slate-600 leading-relaxed">
+                สัดส่วนรายจ่ายต่อรายรับ{' '}
+                {comparison.expenseRatioDiff === 0 ? (
+                  <>เท่าเดิมที่ <span className="font-extrabold">{fmtPct(comparison.current.stats.expenseToIncomePct)}</span></>
+                ) : (
+                  <>
+                    <span className={`font-extrabold ${comparison.expenseRatioDiff < 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                      {comparison.expenseRatioDiff < 0 ? 'ลดลง' : 'เพิ่มขึ้น'} {fmtPct(Math.abs(comparison.expenseRatioDiff))}
+                    </span>{' '}
+                    จาก {fmtPct(comparison.previous.stats.expenseToIncomePct)} เป็น{' '}
+                    {fmtPct(comparison.current.stats.expenseToIncomePct)}
+                  </>
+                )}
+                {comparison.expenseRatioDiff < 0 && ' — ใช้จ่ายประหยัดขึ้น'}
+                {comparison.expenseRatioDiff > 0 && ' — ใช้จ่ายมากขึ้นเมื่อเทียบกับรายรับ'}
               </p>
-              <div className="flex flex-wrap gap-2">
-                <ChangePill label="รายรับ" value={momChange.income} goodWhenUp />
-                <ChangePill label="รายจ่าย" value={momChange.expense} goodWhenUp={false} />
-              </div>
             </div>
           )}
         </div>
@@ -298,25 +347,45 @@ export default function AnalyticsClient({ userId }: { userId: string }) {
   )
 }
 
-function ChangePill({ label, value, goodWhenUp }: { label: string; value: number | null; goodWhenUp: boolean }) {
-  if (value === null) {
-    return (
-      <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-slate-50 text-slate-500 border border-slate-200">
-        {label} — เทียบไม่ได้ (เดือนก่อนเป็น 0)
-      </span>
-    )
-  }
-  const up = value > 0
+/** ช่องเทียบตัวเลขช่วงปัจจุบัน vs ช่วงก่อนหน้า พร้อม % การเปลี่ยนแปลง */
+function CompareCell({
+  label,
+  current,
+  previous,
+  change,
+  goodWhenUp,
+}: {
+  label: string
+  current: number
+  previous: number
+  change: number | null
+  goodWhenUp: boolean
+}) {
+  // ขึ้นแล้วดีไหม ขึ้นกับว่าเป็นรายรับ (ขึ้น=ดี) หรือรายจ่าย (ขึ้น=แย่)
+  const up = change !== null && change > 0
+  const flat = change === null || change === 0
   const good = up === goodWhenUp
-  const tone = value === 0
-    ? 'bg-slate-50 text-slate-500 border-slate-200'
+  const tone = flat
+    ? 'text-slate-500 bg-slate-50 border-slate-200'
     : good
-      ? 'bg-emerald-50 text-emerald-600 border-emerald-100'
-      : 'bg-rose-50 text-rose-600 border-rose-100'
+      ? 'text-emerald-600 bg-emerald-50 border-emerald-100'
+      : 'text-rose-600 bg-rose-50 border-rose-100'
+
   return (
-    <span className={`text-[10px] font-extrabold px-2.5 py-1 rounded-full border tabular-nums ${tone}`}>
-      {label} {up ? '▲' : value === 0 ? '—' : '▼'} {fmtPct(Math.abs(value))}
-    </span>
+    <div className="bg-white border border-slate-200/60 rounded-2xl p-3 space-y-1.5">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[10px] font-bold text-slate-400">{label}</p>
+        <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border tabular-nums ${tone}`}>
+          {change === null ? 'ใหม่' : change === 0 ? '— 0%' : `${up ? '▲' : '▼'} ${fmtPct(Math.abs(change))}`}
+        </span>
+      </div>
+      <p className="text-sm font-extrabold text-slate-800 tabular-nums">
+        {current < 0 ? '-' : ''}฿{fmtMoney(Math.abs(current))}
+      </p>
+      <p className="text-[10px] font-bold text-slate-400 tabular-nums">
+        เดิม {previous < 0 ? '-' : ''}฿{fmtMoney(Math.abs(previous))}
+      </p>
+    </div>
   )
 }
 
