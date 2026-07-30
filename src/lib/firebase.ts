@@ -27,3 +27,6 @@ const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0
 export const auth = getAuth(app)
 export const db = getFirestore(app)
 export const googleProvider = new GoogleAuthProvider()
+// บังคับให้ Google โชว์หน้าเลือกบัญชีทุกครั้ง — ไม่งั้นถ้าเบราว์เซอร์ล็อกอินไว้บัญชีเดียว
+// มันจะข้ามหน้าเลือกแล้วใช้บัญชีนั้นเลย ทำให้สลับบัญชีไม่ได้
+googleProvider.setCustomParameters({ prompt: 'select_account' })

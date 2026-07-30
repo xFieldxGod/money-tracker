@@ -1,18 +1,40 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // แอดมิน = users/{uid} มี role == 'admin'
+    // ตั้งค่าได้จาก Firebase Console เท่านั้น (ผู้ใช้เขียน role ให้ตัวเองไม่ได้ — ดูกฎ users ด้านล่าง)
+    function isAdmin() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    function isOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+
     match /transactions/{docId} {
-      allow read, write: if request.auth != null && request.auth.uid == resource.data.user_id;
-      allow create: if request.auth != null && request.auth.uid == request.resource.data.user_id;
+      // แอดมินอ่านได้ทุกคน (สำหรับหน้าวิเคราะห์ /admin) แต่แก้ไขข้อมูลคนอื่นไม่ได้
+      allow read: if isOwner(resource.data.user_id) || isAdmin();
+      allow create: if isOwner(request.resource.data.user_id);
+      allow update, delete: if isOwner(resource.data.user_id);
     }
 
     match /users/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow read: if isOwner(userId) || isAdmin();
+      // ผู้ใช้แก้โปรไฟล์ตัวเองได้ แต่ห้ามตั้ง/แก้ role ของตัวเอง — กันการยกระดับสิทธิ์เป็นแอดมิน
+      allow create: if isOwner(userId) && !('role' in request.resource.data);
+      allow update: if isOwner(userId)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(
+             ['profile', 'customCategories', 'hiddenPresets', 'wallets']
+           );
+      allow delete: if false;
     }
 
     match /debts/{docId} {
-      allow read, write: if request.auth != null && request.auth.uid == resource.data.user_id;
-      allow create: if request.auth != null && request.auth.uid == request.resource.data.user_id;
+      allow read: if isOwner(resource.data.user_id) || isAdmin();
+      allow create: if isOwner(request.resource.data.user_id);
+      allow update, delete: if isOwner(resource.data.user_id);
     }
   }
 }

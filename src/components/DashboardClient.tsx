@@ -26,7 +26,8 @@ import { useProfile } from '@/lib/useProfile'
 import ProfileEditModal from './ProfileEditModal'
 import { txMatchesWallet, signedAmount, resolveWalletId, walletName } from '@/lib/wallets'
 import { groupTrashByMonth, isActiveTransaction, isTrashExpired, type TrashMonthGroup } from '@/lib/trash'
-import { ArrowLeftRight, Settings, Trash2, Download, ChartPie, Plus, List, HandCoins, Wallet, SquarePen } from 'lucide-react'
+import { ArrowLeftRight, Settings, Trash2, Download, ChartPie, Plus, List, HandCoins, Wallet, SquarePen, ChartColumnBig, Shield } from 'lucide-react'
+import { useAdmin } from '@/lib/useAdmin'
 import TrashBin from './TrashBin'
 
 const MonthlyChart = dynamic(() => import('./MonthlyChart'), {
@@ -94,6 +95,7 @@ export default function DashboardClient({ userId }: Props) {
   const [failedAvatarUrl, setFailedAvatarUrl] = useState<string | null>(null)
   const [showProfileEdit, setShowProfileEdit] = useState(false)
   const { profile, saveProfile } = useProfile(userId)
+  const { isAdmin } = useAdmin(userId)
   // ชื่อ/รูปที่ตั้งเองใน Firestore มาก่อน ถ้าไม่มีค่อยใช้จากบัญชี (Google)
   const displayName = profile.name || user?.displayName || null
   const avatarUrl = profile.photo || user?.photoURL || null
@@ -584,6 +586,26 @@ export default function DashboardClient({ userId }: Props) {
                   <span>แก้ไขโปรไฟล์</span>
                 </button>
 
+                <Link
+                  href="/analytics"
+                  onClick={() => setShowProfileMenu(false)}
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-left text-xs font-bold text-slate-600 hover:text-indigo-600 hover:bg-indigo-50/50 transition-all cursor-pointer"
+                >
+                  <ChartColumnBig className="w-3.5 h-3.5" />
+                  <span>วิเคราะห์การเงิน</span>
+                </Link>
+
+                {isAdmin && (
+                  <Link
+                    href="/admin"
+                    onClick={() => setShowProfileMenu(false)}
+                    className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-left text-xs font-bold text-amber-700 hover:bg-amber-50/70 transition-all cursor-pointer"
+                  >
+                    <Shield className="w-3.5 h-3.5" />
+                    <span>แดชบอร์ดผู้ดูแลระบบ</span>
+                  </Link>
+                )}
+
                 <button
                   onClick={() => {
                     setShowProfileMenu(false);
@@ -798,6 +820,16 @@ export default function DashboardClient({ userId }: Props) {
             <List className="w-5 h-5" />
             <span className="text-[9px]">รายการ</span>
           </button>
+
+          {/* Analytics Tab */}
+          <Link
+            href="/analytics"
+            onClick={() => setShowWalletPopover(false)}
+            className="flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-2xl transition-all text-slate-400 hover:text-indigo-500 font-semibold"
+          >
+            <ChartColumnBig className="w-5 h-5" />
+            <span className="text-[9px]">วิเคราะห์</span>
+          </Link>
 
           {/* Debts Tab */}
           <Link
